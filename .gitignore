@@ -1,0 +1,14 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Archives and local temp
+*.zip
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Bicep cache
+.bicep/

@@ -1,0 +1,298 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json#",
+  "view": {
+    "kind": "Form",
+    "properties": {
+      "title": "Elrehan Azure Infrastructure Deployment Wizard (Subscription Scope)",
+      "steps": [
+        {
+          "name": "basics",
+          "label": "Basics",
+          "description": "Select the target subscription, resource group (new or existing), and primary Azure region.",
+          "elements": [
+            {
+              "name": "subscription",
+              "type": "Microsoft.Common.SubscriptionSelector",
+              "label": "Subscription",
+              "resourceProviders": [
+                "Microsoft.Network",
+                "Microsoft.Compute"
+              ]
+            },
+            {
+              "name": "resourceGroup",
+              "type": "Microsoft.Common.ResourceGroupSelector",
+              "label": "Resource group",
+              "allowedMode": "Both",
+              "scope": {
+                "subscriptionId": "[steps('basics').subscription.subscriptionId]"
+              }
+            },
+            {
+              "name": "location",
+              "type": "Microsoft.Common.LocationSelector",
+              "label": "Deployment Region",
+              "resourceTypes": [
+                "Microsoft.Network/virtualNetworks",
+                "Microsoft.Compute/virtualMachines"
+              ],
+              "scope": {
+                "subscriptionId": "[steps('basics').subscription.subscriptionId]"
+              }
+            },
+            {
+              "name": "tags",
+              "type": "Microsoft.Common.TagsByResource",
+              "label": "Resource Tags",
+              "resources": [
+                "Microsoft.Resources/deployments"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "networking",
+          "label": "Networking",
+          "description": "Configure Virtual Network address space and dynamic subnets.",
+          "elements": [
+            {
+              "name": "vnetName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Virtual Network Name",
+              "defaultValue": "vnet-elrehan-pilot",
+              "constraints": {
+                "required": true,
+                "validations": [
+                  {
+                    "regex": "^[a-zA-Z0-9-_.]{2,64}$",
+                    "message": "VNet name must be between 2 and 64 characters."
+                  }
+                ]
+              }
+            },
+            {
+              "name": "addressPrefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "VNet Address Space (IPv4 CIDR)",
+              "defaultValue": "10.0.0.0/16",
+              "constraints": {
+                "required": true,
+                "validations": [
+                  {
+                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
+                    "message": "Must be a valid IPv4 CIDR prefix."
+                  }
+                ]
+              }
+            },
+            {
+              "name": "subnetsGrid",
+              "type": "Microsoft.Common.EditableGrid",
+              "label": "Subnets Configuration",
+              "ariaLabel": "Subnet configuration table",
+              "constraints": {
+                "width": "Full",
+                "rows": {
+                  "count": {
+                    "min": 1,
+                    "max": 10
+                  }
+                },
+                "columns": [
+                  {
+                    "id": "name",
+                    "header": "Subnet Name",
+                    "width": "1fr",
+                    "element": {
+                      "type": "Microsoft.Common.TextBox",
+                      "placeholder": "e.g. snet-workload",
+                      "constraints": {
+                        "required": true,
+                        "validations": [
+                          {
+                            "regex": "^[a-zA-Z0-9-_.]{1,80}$",
+                            "message": "Subnet name must be between 1 and 80 characters."
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "id": "addressPrefix",
+                    "header": "Subnet CIDR Prefix",
+                    "width": "1fr",
+                    "element": {
+                      "type": "Microsoft.Common.TextBox",
+                      "placeholder": "e.g. 10.0.1.0/24",
+                      "constraints": {
+                        "required": true,
+                        "validations": [
+                          {
+                            "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
+                            "message": "Must be a valid IPv4 CIDR prefix."
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "compute",
+          "label": "Virtual Machines",
+          "description": "Configure compute parameters and size selector.",
+          "elements": [
+            {
+              "name": "deployVmToggle",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Enable Virtual Machine Resource Deployment (Pilot Mode)"
+            },
+            {
+              "name": "osTypeOptions",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "Operating System",
+              "defaultValue": "Linux",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Linux (Ubuntu Server 22.04 LTS)",
+                    "value": "Linux"
+                  },
+                  {
+                    "label": "Windows (Windows Server 2022 Datacenter)",
+                    "value": "Windows"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "vmName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Virtual Machine Name",
+              "defaultValue": "vm-elrehan-pilot-01",
+              "constraints": {
+                "required": true,
+                "validations": [
+                  {
+                    "regex": "^[a-zA-Z0-9-]{1,64}$",
+                    "message": "VM name must be 1 to 64 alphanumeric characters or hyphens."
+                  }
+                ]
+              }
+            },
+            {
+              "name": "vmSizeLinux",
+              "type": "Microsoft.Compute.SizeSelector",
+              "label": "Virtual Machine Size (Linux)",
+              "recommendedSizes": [
+                "Standard_D2s_v5",
+                "Standard_B2s",
+                "Standard_D4s_v5"
+              ],
+              "osPlatform": "Linux",
+              "scope": {
+                "subscriptionId": "[steps('basics').subscription.subscriptionId]",
+                "location": "[steps('basics').location.name]"
+              },
+              "visible": "[equals(steps('compute').osTypeOptions, 'Linux')]"
+            },
+            {
+              "name": "vmSizeWindows",
+              "type": "Microsoft.Compute.SizeSelector",
+              "label": "Virtual Machine Size (Windows)",
+              "recommendedSizes": [
+                "Standard_D2s_v5",
+                "Standard_D4s_v5",
+                "Standard_B2ms"
+              ],
+              "osPlatform": "Windows",
+              "scope": {
+                "subscriptionId": "[steps('basics').subscription.subscriptionId]",
+                "location": "[steps('basics').location.name]"
+              },
+              "visible": "[equals(steps('compute').osTypeOptions, 'Windows')]"
+            },
+            {
+              "name": "selectedSubnetName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Target Subnet Name",
+              "defaultValue": "snet-workload",
+              "constraints": {
+                "required": true
+              }
+            },
+            {
+              "name": "adminUsername",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Administrator Username",
+              "defaultValue": "azureuser",
+              "constraints": {
+                "required": true,
+                "validations": [
+                  {
+                    "regex": "^[a-zA-Z0-9-_.]{1,64}$",
+                    "message": "Username must be 1 to 64 alphanumeric characters, hyphens, or underscores."
+                  }
+                ]
+              }
+            },
+            {
+              "name": "adminSshPublicKey",
+              "type": "Microsoft.Common.TextBox",
+              "label": "SSH Public Key (Linux)",
+              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux'))]",
+              "constraints": {
+                "required": false,
+                "validations": [
+                  {
+                    "regex": "^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256)\\s+[A-Za-z0-9+/=]+.*$",
+                    "message": "Must be a valid OpenSSH public key format."
+                  }
+                ]
+              }
+            },
+            {
+              "name": "adminPassword",
+              "type": "Microsoft.Common.PasswordBox",
+              "label": {
+                "password": "Administrator Password (Windows)",
+                "confirmPassword": "Confirm Password"
+              },
+              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Windows'))]",
+              "constraints": {
+                "required": false,
+                "regex": "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()-_=+]).{12,123}$",
+                "validationMessage": "Password must be 12 to 123 characters and satisfy complexity requirements."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "kind": "Subscription",
+      "subscriptionId": "[steps('basics').subscription.subscriptionId]",
+      "location": "[steps('basics').location.name]",
+      "parameters": {
+        "location": "[steps('basics').location.name]",
+        "resourceGroupName": "[steps('basics').resourceGroup.value.name]",
+        "createNewResourceGroup": "[equals(steps('basics').resourceGroup.mode, 'New')]",
+        "tags": "[steps('basics').tags]",
+        "vnetName": "[steps('networking').vnetName]",
+        "addressPrefix": "[steps('networking').addressPrefix]",
+        "subnets": "[steps('networking').subnetsGrid]",
+        "deployVm": "[steps('compute').deployVmToggle]",
+        "osType": "[steps('compute').osTypeOptions]",
+        "vmName": "[steps('compute').vmName]",
+        "vmSize": "[if(equals(steps('compute').osTypeOptions, 'Linux'), steps('compute').vmSizeLinux, steps('compute').vmSizeWindows)]",
+        "selectedSubnetName": "[steps('compute').selectedSubnetName]",
+        "adminUsername": "[steps('compute').adminUsername]",
+        "adminPassword": "[if(and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Windows')), steps('compute').adminPassword, '')]",
+        "adminSshPublicKey": "[if(and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux')), steps('compute').adminSshPublicKey, '')]"
+      }
+    }
+  }
+}
