@@ -10,15 +10,27 @@ param location string = resourceGroup().location
 })
 param tags object = {}
 
+// ==========================================
+// 1. Networking Parameters
+// ==========================================
 @metadata({
-  description: 'Name of the virtual network.'
+  description: 'Deployment mode for Virtual Network: new (create new VNet) or existing (use existing VNet).'
+})
+@allowed([
+  'new'
+  'existing'
+])
+param vnetMode string = 'new'
+
+@metadata({
+  description: 'Name of the virtual network (used when vnetMode is new).'
 })
 @minLength(2)
 @maxLength(64)
 param vnetName string = 'vnet-elrehan-pilot'
 
 @metadata({
-  description: 'Address prefix for the virtual network (IPv4 CIDR).'
+  description: 'Address prefix for the virtual network (IPv4 CIDR, used when vnetMode is new).'
 })
 param addressPrefix string = '10.0.0.0/16'
 
@@ -34,7 +46,7 @@ type subnetType = {
 }
 
 @metadata({
-  description: 'Subnets array configured via dynamic UI grid.'
+  description: 'Subnets array configured via dynamic UI grid (used when vnetMode is new).'
 })
 @minLength(1)
 param subnets subnetType[] = [
@@ -48,6 +60,100 @@ param subnets subnetType[] = [
   }
 ]
 
+@metadata({
+  description: 'Name of the existing virtual network (used when vnetMode is existing).'
+})
+param existingVnetName string = ''
+
+@metadata({
+  description: 'Resource Group containing the existing virtual network. Defaults to current resource group if empty.'
+})
+param existingVnetResourceGroup string = ''
+
+@metadata({
+  description: 'Name of an existing subnet in the existing VNet to reference.'
+})
+param existingSubnetName string = ''
+
+@metadata({
+  description: 'Whether to create an additional subnet in the existing virtual network.'
+})
+param addNewSubnet bool = false
+
+@metadata({
+  description: 'Name of the additional subnet to create in the existing virtual network.'
+})
+param newSubnetName string = ''
+
+@metadata({
+  description: 'IPv4 CIDR prefix of the additional subnet to create in the existing virtual network.'
+})
+param newSubnetPrefix string = ''
+
+// ==========================================
+// 2. Security (NSG) Parameters
+// ==========================================
+@metadata({
+  description: 'Network Security Group mode: new (create new NSG), existing (associate existing NSG), or none.'
+})
+@allowed([
+  'new'
+  'existing'
+  'none'
+])
+param nsgMode string = 'new'
+
+@metadata({
+  description: 'Name of the Network Security Group to create (used when nsgMode is new).'
+})
+param nsgName string = 'nsg-elrehan-pilot'
+
+@metadata({
+  description: 'Name of an existing Network Security Group to associate (used when nsgMode is existing).'
+})
+param existingNsgName string = ''
+
+@metadata({
+  description: 'Resource Group containing the existing NSG. Defaults to current resource group if empty.'
+})
+param existingNsgResourceGroup string = ''
+
+// ==========================================
+// 3. Routing (Route Table) Parameters
+// ==========================================
+@metadata({
+  description: 'Route Table mode: new (create new Route Table), existing (associate existing Route Table), or none.'
+})
+@allowed([
+  'new'
+  'existing'
+  'none'
+])
+param routeTableMode string = 'none'
+
+@metadata({
+  description: 'Name of the Route Table to create (used when routeTableMode is new).'
+})
+param routeTableName string = 'rt-elrehan-pilot'
+
+@metadata({
+  description: 'Whether to disable BGP route propagation on the created Route Table.'
+})
+param disableBgpRoutePropagation bool = false
+
+@metadata({
+  description: 'Name of an existing Route Table to associate (used when routeTableMode is existing).'
+})
+param existingRouteTableName string = ''
+
+@metadata({
+  description: 'Resource Group containing the existing Route Table. Defaults to current resource group if empty.'
+})
+param existingRouteTableResourceGroup string = ''
+
+// ==========================================
+// 4. Virtual Machines Parameters
+// ==========================================
 @metadata({
   description: 'Pilot safety flag. When false, VM parameters are validated but VM deployment is skipped.'
 })
@@ -75,7 +181,7 @@ param vmName string = 'vm-elrehan-pilot-01'
 param vmSize string = 'Standard_D2s_v5'
 
 @metadata({
-  description: 'Subnet name where the pilot VM NIC attaches. Must match a configured subnet name.'
+  description: 'Subnet name where the pilot VM NIC attaches. Must match a configured or existing subnet name.'
 })
 param selectedSubnetName string = 'snet-workload'
 
@@ -98,38 +204,105 @@ param adminPassword string = ''
 @secure()
 param adminSshPublicKey string = ''
 
-// Handle tags input: unpack nested tags if passed via Microsoft.Common.TagsByResource or keep flat dictionary
+// ==========================================
+// Variables & Pre-Flight Validation Guards
+// ==========================================
 #disable-next-line use-safe-access
 var effectiveTags = contains(tags, 'Microsoft.Resources/deployments') ? tags['Microsoft.Resources/deployments'] : tags
 
-// Authentication verification: Linux requires ssh-rsa or ssh-ed25519; Windows requires 12-123 character password
 var isLinux = (osType == 'Linux')
 var isWindows = (osType == 'Windows')
 var hasValidLinuxAuth = isLinux && !empty(adminSshPublicKey) && (startsWith(adminSshPublicKey, 'ssh-rsa') || startsWith(adminSshPublicKey, 'ssh-ed25519'))
 var hasValidWindowsAuth = isWindows && !empty(adminPassword) && length(adminPassword) >= 12 && length(adminPassword) <= 123
 var hasValidAuth = hasValidLinuxAuth || hasValidWindowsAuth
 
-// Subnet validation: selectedSubnetName must match one of the configured subnets when deployVm is true
+// Subnet validation logic
 var configuredSubnetNames = [for s in subnets: s.name]
-var isSubnetValid = !empty(selectedSubnetName) && contains(configuredSubnetNames, selectedSubnetName)
+var isNewVnetSubnetValid = (vnetMode == 'new') && !empty(selectedSubnetName) && contains(configuredSubnetNames, selectedSubnetName)
+var isExistingVnetSubnetValid = (vnetMode == 'existing') && !empty(selectedSubnetName) && ((addNewSubnet && selectedSubnetName == newSubnetName) || (!empty(existingSubnetName) && selectedSubnetName == existingSubnetName))
+var isSubnetValid = isNewVnetSubnetValid || isExistingVnetSubnetValid
 
-// Explicit validation failure guards (no silent fallback or silent suppression)
+// Pre-flight fail() guards
 var authCheck = deployVm ? (!hasValidAuth ? fail('VM deployment is enabled, but valid authentication credentials were not provided. Linux requires an RSA (ssh-rsa) or ED25519 (ssh-ed25519) SSH public key; Windows requires a password between 12 and 123 characters satisfying complexity requirements.') : true) : true
-var subnetCheck = deployVm ? (!isSubnetValid ? fail('VM deployment is enabled, but the selected subnet "${selectedSubnetName}" does not match any configured subnet in the subnets array.') : true) : true
+var subnetCheck = deployVm ? (!isSubnetValid ? fail('VM deployment is enabled, but the selected subnet "${selectedSubnetName}" does not match any configured or existing subnet.') : true) : true
+var existingVnetCheck = (vnetMode == 'existing') ? (empty(existingVnetName) ? fail('vnetMode is set to existing, but existingVnetName was not provided.') : true) : true
+var existingNsgCheck = (nsgMode == 'existing') ? (empty(existingNsgName) ? fail('nsgMode is set to existing, but existingNsgName was not provided.') : true) : true
+var existingRtCheck = (routeTableMode == 'existing') ? (empty(existingRouteTableName) ? fail('routeTableMode is set to existing, but existingRouteTableName was not provided.') : true) : true
 
-// 1. Networking module deployed directly in resource group scope
-module networkModule 'modules/network.bicep' = {
+// Target resource group calculation for cross-RG existing resources
+var effectiveVnetRg = empty(existingVnetResourceGroup) ? resourceGroup().name : existingVnetResourceGroup
+var effectiveNsgRg = empty(existingNsgResourceGroup) ? resourceGroup().name : existingNsgResourceGroup
+var effectiveRtRg = empty(existingRouteTableResourceGroup) ? resourceGroup().name : existingRouteTableResourceGroup
+
+// ==========================================
+// 1. Security (NSG) Provisioning
+// ==========================================
+module nsgModule 'modules/nsg.bicep' = if (nsgMode == 'new' && existingNsgCheck) {
+  name: 'nsg-deployment'
+  params: {
+    location: location
+    nsgName: nsgName
+    osType: osType
+    tags: effectiveTags
+  }
+}
+
+var effectiveNsgId = (nsgMode == 'new') ? nsgModule.?outputs.nsgId ?? '' : ((nsgMode == 'existing' && existingNsgCheck) ? resourceId(effectiveNsgRg, 'Microsoft.Network/networkSecurityGroups', existingNsgName) : '')
+
+// ==========================================
+// 2. Routing (Route Table) Provisioning
+// ==========================================
+module routeTableModule 'modules/routeTable.bicep' = if (routeTableMode == 'new' && existingRtCheck) {
+  name: 'routetable-deployment'
+  params: {
+    location: location
+    routeTableName: routeTableName
+    disableBgpRoutePropagation: disableBgpRoutePropagation
+    tags: effectiveTags
+  }
+}
+
+var effectiveRouteTableId = (routeTableMode == 'new') ? routeTableModule.?outputs.routeTableId ?? '' : ((routeTableMode == 'existing' && existingRtCheck) ? resourceId(effectiveRtRg, 'Microsoft.Network/routeTables', existingRouteTableName) : '')
+
+// ==========================================
+// 3. Networking Provisioning
+// ==========================================
+// Mode A: Create new Virtual Network
+module networkModule 'modules/network.bicep' = if (vnetMode == 'new') {
   name: 'network-deployment'
   params: {
     location: location
     vnetName: vnetName
     addressPrefix: addressPrefix
     subnets: subnets
+    networkSecurityGroupId: effectiveNsgId
+    routeTableId: effectiveRouteTableId
     tags: effectiveTags
   }
 }
 
-// 2. Compute module conditionally provisioned if deployVm is true, guarded by explicit pre-flight validation
+// Mode B: Deploy additional subnet into existing Virtual Network (supporting cross-RG)
+module existingVnetSubnetModule 'modules/subnet.bicep' = if (vnetMode == 'existing' && addNewSubnet && existingVnetCheck) {
+  name: 'existing-vnet-subnet-deployment'
+  scope: resourceGroup(effectiveVnetRg)
+  params: {
+    vnetName: existingVnetName
+    subnetName: newSubnetName
+    addressPrefix: newSubnetPrefix
+    networkSecurityGroupId: effectiveNsgId
+    routeTableId: effectiveRouteTableId
+  }
+}
+
+var effectiveVnetId = (vnetMode == 'new') ? (networkModule.?outputs.vnetId ?? '') : resourceId(effectiveVnetRg, 'Microsoft.Network/virtualNetworks', existingVnetName)
+var effectiveVnetName = (vnetMode == 'new') ? (networkModule.?outputs.vnetName ?? '') : existingVnetName
+
+// Subnet ID resolution for Compute
+var targetSubnetId = (vnetMode == 'new') ? '${networkModule.?outputs.vnetId}/subnets/${selectedSubnetName}' : (addNewSubnet && selectedSubnetName == newSubnetName ? '${effectiveVnetId}/subnets/${newSubnetName}' : '${effectiveVnetId}/subnets/${selectedSubnetName}')
+
+// ==========================================
+// 4. Compute Provisioning
+// ==========================================
 module computeModule 'modules/compute.bicep' = if (deployVm) {
   name: 'compute-deployment'
   params: {
@@ -140,22 +313,31 @@ module computeModule 'modules/compute.bicep' = if (deployVm) {
     adminUsername: adminUsername
     adminPassword: adminPassword
     adminSshPublicKey: adminSshPublicKey
-    subnetId: (authCheck && subnetCheck) ? '${networkModule.outputs.vnetId}/subnets/${selectedSubnetName}' : ''
+    subnetId: (authCheck && subnetCheck) ? targetSubnetId : ''
     tags: effectiveTags
   }
 }
 
+// ==========================================
+// Outputs
+// ==========================================
 @description('Deployment region.')
 output location string = location
 
+@description('Deployment mode used for Virtual Network.')
+output vnetMode string = vnetMode
+
 @description('Resource ID of the virtual network.')
-output vnetId string = networkModule.outputs.vnetId
+output vnetId string = effectiveVnetId
 
 @description('Name of the virtual network.')
-output vnetName string = networkModule.outputs.vnetName
+output vnetName string = effectiveVnetName
 
-@description('Created subnets metadata.')
-output subnets array = networkModule.outputs.subnets
+@description('Resource ID of the associated Network Security Group, if configured.')
+output nsgId string = effectiveNsgId
+
+@description('Resource ID of the associated Route Table, if configured.')
+output routeTableId string = effectiveRouteTableId
 
 @description('Target subnet attached to the VM NIC.')
 output targetSubnetAttached string = deployVm ? selectedSubnetName : ''
@@ -167,4 +349,4 @@ output vmProvisioned bool = deployVm
 output authConfigured bool = hasValidAuth
 
 @description('Resource ID of the virtual machine if provisioned.')
-output vmId string = deployVm ? computeModule!.outputs.vmId : ''
+output vmId string = deployVm ? computeModule.?outputs.vmId ?? '' : ''

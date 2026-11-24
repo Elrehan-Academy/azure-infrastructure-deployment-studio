@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.49.2.45890",
-      "templateHash": "18393083250120584785"
+      "templateHash": "1109715844345006766"
     }
   },
   "definitions": {
@@ -62,6 +62,17 @@
         "description": "Tags to apply to resources."
       }
     },
+    "vnetMode": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing"
+      ],
+      "metadata": {
+        "description": "Deployment mode for Virtual Network: new (create new VNet) or existing (use existing VNet)."
+      }
+    },
     "vnetName": {
       "type": "string",
       "defaultValue": "vnet-elrehan-pilot",
@@ -97,6 +108,121 @@
         "description": "Subnets array configured via dynamic UI grid."
       },
       "minLength": 1
+    },
+    "existingVnetName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing virtual network (used when vnetMode is existing)."
+      }
+    },
+    "existingVnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource Group containing the existing virtual network. Defaults to target resource group if empty."
+      }
+    },
+    "existingSubnetName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of an existing subnet in the existing VNet to reference."
+      }
+    },
+    "addNewSubnet": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Whether to create an additional subnet in the existing virtual network."
+      }
+    },
+    "newSubnetName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the additional subnet to create in the existing virtual network."
+      }
+    },
+    "newSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "IPv4 CIDR prefix of the additional subnet to create in the existing virtual network."
+      }
+    },
+    "nsgMode": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing",
+        "none"
+      ],
+      "metadata": {
+        "description": "Network Security Group mode: new, existing, or none."
+      }
+    },
+    "nsgName": {
+      "type": "string",
+      "defaultValue": "nsg-elrehan-pilot",
+      "metadata": {
+        "description": "Name of the Network Security Group to create."
+      }
+    },
+    "existingNsgName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of an existing Network Security Group to associate."
+      }
+    },
+    "existingNsgResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource Group containing the existing NSG. Defaults to target resource group if empty."
+      }
+    },
+    "routeTableMode": {
+      "type": "string",
+      "defaultValue": "none",
+      "allowedValues": [
+        "new",
+        "existing",
+        "none"
+      ],
+      "metadata": {
+        "description": "Route Table mode: new, existing, or none."
+      }
+    },
+    "routeTableName": {
+      "type": "string",
+      "defaultValue": "rt-elrehan-pilot",
+      "metadata": {
+        "description": "Name of the Route Table to create."
+      }
+    },
+    "disableBgpRoutePropagation": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Whether to disable BGP route propagation."
+      }
+    },
+    "existingRouteTableName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of an existing Route Table to associate."
+      }
+    },
+    "existingRouteTableResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource Group containing the existing Route Table."
+      }
     },
     "deployVm": {
       "type": "bool",
@@ -136,7 +262,7 @@
       "type": "string",
       "defaultValue": "snet-workload",
       "metadata": {
-        "description": "Subnet name where the pilot VM NIC attaches. Must match a configured subnet name."
+        "description": "Subnet name where the pilot VM NIC attaches. Must match a configured or existing subnet name."
       }
     },
     "adminUsername": {
@@ -177,9 +303,11 @@
     "hasValidLinuxAuth": "[and(and(variables('isLinux'), not(empty(parameters('adminSshPublicKey')))), or(startsWith(parameters('adminSshPublicKey'), 'ssh-rsa'), startsWith(parameters('adminSshPublicKey'), 'ssh-ed25519')))]",
     "hasValidWindowsAuth": "[and(and(and(variables('isWindows'), not(empty(parameters('adminPassword')))), greaterOrEquals(length(parameters('adminPassword')), 12)), lessOrEquals(length(parameters('adminPassword')), 123))]",
     "hasValidAuth": "[or(variables('hasValidLinuxAuth'), variables('hasValidWindowsAuth'))]",
-    "isSubnetValid": "[and(not(empty(parameters('selectedSubnetName'))), contains(variables('configuredSubnetNames'), parameters('selectedSubnetName')))]",
+    "isNewVnetSubnetValid": "[and(and(equals(parameters('vnetMode'), 'new'), not(empty(parameters('selectedSubnetName')))), contains(variables('configuredSubnetNames'), parameters('selectedSubnetName')))]",
+    "isExistingVnetSubnetValid": "[and(and(equals(parameters('vnetMode'), 'existing'), not(empty(parameters('selectedSubnetName')))), or(and(parameters('addNewSubnet'), equals(parameters('selectedSubnetName'), parameters('newSubnetName'))), and(not(empty(parameters('existingSubnetName'))), equals(parameters('selectedSubnetName'), parameters('existingSubnetName')))))]",
+    "isSubnetValid": "[or(variables('isNewVnetSubnetValid'), variables('isExistingVnetSubnetValid'))]",
     "authCheck": "[if(parameters('deployVm'), if(not(variables('hasValidAuth')), fail('VM deployment is enabled, but valid authentication credentials were not provided. Linux requires an RSA (ssh-rsa) or ED25519 (ssh-ed25519) SSH public key; Windows requires a password between 12 and 123 characters satisfying complexity requirements.'), true()), true())]",
-    "subnetCheck": "[if(parameters('deployVm'), if(not(variables('isSubnetValid')), fail(format('VM deployment is enabled, but the selected subnet \"{0}\" does not match any configured subnet in the subnets array.', parameters('selectedSubnetName'))), true()), true())]"
+    "subnetCheck": "[if(parameters('deployVm'), if(not(variables('isSubnetValid')), fail(format('VM deployment is enabled, but the selected subnet \"{0}\" does not match any configured or existing subnet.', parameters('selectedSubnetName'))), true()), true())]"
   },
   "resources": {
     "targetResourceGroup": {
@@ -190,10 +318,10 @@
       "location": "[parameters('location')]",
       "tags": "[variables('effectiveTags')]"
     },
-    "networkModule": {
+    "rgDeployment": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "network-deployment",
+      "name": "rg-deployment",
       "resourceGroup": "[parameters('resourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
@@ -204,6 +332,12 @@
           "location": {
             "value": "[parameters('location')]"
           },
+          "tags": {
+            "value": "[variables('effectiveTags')]"
+          },
+          "vnetMode": {
+            "value": "[parameters('vnetMode')]"
+          },
           "vnetName": {
             "value": "[parameters('vnetName')]"
           },
@@ -213,8 +347,74 @@
           "subnets": {
             "value": "[parameters('subnets')]"
           },
-          "tags": {
-            "value": "[variables('effectiveTags')]"
+          "existingVnetName": {
+            "value": "[parameters('existingVnetName')]"
+          },
+          "existingVnetResourceGroup": {
+            "value": "[parameters('existingVnetResourceGroup')]"
+          },
+          "existingSubnetName": {
+            "value": "[parameters('existingSubnetName')]"
+          },
+          "addNewSubnet": {
+            "value": "[parameters('addNewSubnet')]"
+          },
+          "newSubnetName": {
+            "value": "[parameters('newSubnetName')]"
+          },
+          "newSubnetPrefix": {
+            "value": "[parameters('newSubnetPrefix')]"
+          },
+          "nsgMode": {
+            "value": "[parameters('nsgMode')]"
+          },
+          "nsgName": {
+            "value": "[parameters('nsgName')]"
+          },
+          "existingNsgName": {
+            "value": "[parameters('existingNsgName')]"
+          },
+          "existingNsgResourceGroup": {
+            "value": "[parameters('existingNsgResourceGroup')]"
+          },
+          "routeTableMode": {
+            "value": "[parameters('routeTableMode')]"
+          },
+          "routeTableName": {
+            "value": "[parameters('routeTableName')]"
+          },
+          "disableBgpRoutePropagation": {
+            "value": "[parameters('disableBgpRoutePropagation')]"
+          },
+          "existingRouteTableName": {
+            "value": "[parameters('existingRouteTableName')]"
+          },
+          "existingRouteTableResourceGroup": {
+            "value": "[parameters('existingRouteTableResourceGroup')]"
+          },
+          "deployVm": {
+            "value": "[parameters('deployVm')]"
+          },
+          "osType": {
+            "value": "[parameters('osType')]"
+          },
+          "vmName": {
+            "value": "[parameters('vmName')]"
+          },
+          "vmSize": {
+            "value": "[parameters('vmSize')]"
+          },
+          "selectedSubnetName": {
+            "value": "[parameters('selectedSubnetName')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "adminSshPublicKey": {
+            "value": "[parameters('adminSshPublicKey')]"
           }
         },
         "template": {
@@ -225,7 +425,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.49.2.45890",
-              "templateHash": "13286413636686860351"
+              "templateHash": "2582584068160859841"
             }
           },
           "definitions": {
@@ -257,21 +457,41 @@
               "type": "string",
               "defaultValue": "[resourceGroup().location]",
               "metadata": {
-                "description": "Azure region for the virtual network resources."
+                "description": "Azure region for the resources. Defaults to the target resource group location."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to resources."
+              }
+            },
+            "vnetMode": {
+              "type": "string",
+              "defaultValue": "new",
+              "allowedValues": [
+                "new",
+                "existing"
+              ],
+              "metadata": {
+                "description": "Deployment mode for Virtual Network: new (create new VNet) or existing (use existing VNet)."
               }
             },
             "vnetName": {
               "type": "string",
-              "minLength": 2,
-              "maxLength": 64,
+              "defaultValue": "vnet-elrehan-pilot",
               "metadata": {
-                "description": "The name of the virtual network."
-              }
+                "description": "Name of the virtual network (used when vnetMode is new)."
+              },
+              "minLength": 2,
+              "maxLength": 64
             },
             "addressPrefix": {
               "type": "string",
+              "defaultValue": "10.0.0.0/16",
               "metadata": {
-                "description": "The top-level IPv4 CIDR address prefix for the virtual network."
+                "description": "Address prefix for the virtual network (IPv4 CIDR, used when vnetMode is new)."
               }
             },
             "subnets": {
@@ -279,164 +499,141 @@
               "items": {
                 "$ref": "#/definitions/subnetType"
               },
-              "minLength": 1,
+              "defaultValue": [
+                {
+                  "name": "snet-workload",
+                  "addressPrefix": "10.0.1.0/24"
+                },
+                {
+                  "name": "snet-management",
+                  "addressPrefix": "10.0.2.0/24"
+                }
+              ],
               "metadata": {
-                "description": "List of subnet objects with name and addressPrefix properties."
-              }
+                "description": "Subnets array configured via dynamic UI grid (used when vnetMode is new)."
+              },
+              "minLength": 1
             },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to the virtual network."
-              }
-            },
-            "networkSecurityGroupId": {
+            "existingVnetName": {
               "type": "string",
               "defaultValue": "",
               "metadata": {
-                "description": "Optional default Network Security Group ID to attach to subnets."
-              }
-            }
-          },
-          "variables": {
-            "copy": [
-              {
-                "name": "subnetNames",
-                "count": "[length(parameters('subnets'))]",
-                "input": "[toLower(parameters('subnets')[copyIndex('subnetNames')].name)]"
-              }
-            ],
-            "hasDuplicateSubnetNames": "[not(equals(length(union(variables('subnetNames'), createArray())), length(variables('subnetNames'))))]",
-            "subnetNameCheck": "[if(variables('hasDuplicateSubnetNames'), fail('Duplicate subnet names detected in subnets array. Subnet names must be unique.'), true())]"
-          },
-          "resources": {
-            "vnet": {
-              "type": "Microsoft.Network/virtualNetworks",
-              "apiVersion": "2024-05-01",
-              "name": "[parameters('vnetName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "copy": [
-                  {
-                    "name": "subnets",
-                    "count": "[length(parameters('subnets'))]",
-                    "input": {
-                      "name": "[parameters('subnets')[copyIndex('subnets')].name]",
-                      "properties": {
-                        "addressPrefix": "[parameters('subnets')[copyIndex('subnets')].addressPrefix]",
-                        "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]"
-                      }
-                    }
-                  }
-                ],
-                "addressSpace": {
-                  "addressPrefixes": [
-                    "[if(variables('subnetNameCheck'), parameters('addressPrefix'), parameters('addressPrefix'))]"
-                  ]
-                }
-              }
-            }
-          },
-          "outputs": {
-            "vnetId": {
-              "type": "string",
-              "metadata": {
-                "description": "The resource ID of the created virtual network."
-              },
-              "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
-            },
-            "vnetName": {
-              "type": "string",
-              "metadata": {
-                "description": "The name of the created virtual network."
-              },
-              "value": "[parameters('vnetName')]"
-            },
-            "subnets": {
-              "type": "array",
-              "metadata": {
-                "description": "The array of created subnets."
-              },
-              "copy": {
-                "count": "[length(parameters('subnets'))]",
-                "input": {
-                  "name": "[parameters('subnets')[copyIndex()].name]",
-                  "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnets')[copyIndex()].name)]",
-                  "addressPrefix": "[parameters('subnets')[copyIndex()].addressPrefix]"
-                }
-              }
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "targetResourceGroup"
-      ]
-    },
-    "computeModule": {
-      "condition": "[parameters('deployVm')]",
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "compute-deployment",
-      "resourceGroup": "[parameters('resourceGroupName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "vmName": {
-            "value": "[parameters('vmName')]"
-          },
-          "osType": {
-            "value": "[parameters('osType')]"
-          },
-          "vmSize": {
-            "value": "[parameters('vmSize')]"
-          },
-          "adminUsername": {
-            "value": "[parameters('adminUsername')]"
-          },
-          "adminPassword": {
-            "value": "[parameters('adminPassword')]"
-          },
-          "adminSshPublicKey": {
-            "value": "[parameters('adminSshPublicKey')]"
-          },
-          "subnetId": "[if(and(variables('authCheck'), variables('subnetCheck')), createObject('value', format('{0}/subnets/{1}', reference('networkModule').outputs.vnetId.value, parameters('selectedSubnetName'))), createObject('value', ''))]",
-          "tags": {
-            "value": "[variables('effectiveTags')]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.49.2.45890",
-              "templateHash": "9815973814678113446"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "defaultValue": "[resourceGroup().location]",
-              "metadata": {
-                "description": "Azure region for compute resources."
+                "description": "Name of the existing virtual network (used when vnetMode is existing)."
               }
             },
-            "vmName": {
+            "existingVnetResourceGroup": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
+              "defaultValue": "",
               "metadata": {
-                "description": "Name of the Virtual Machine."
+                "description": "Resource Group containing the existing virtual network. Defaults to current resource group if empty."
+              }
+            },
+            "existingSubnetName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of an existing subnet in the existing VNet to reference."
+              }
+            },
+            "addNewSubnet": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Whether to create an additional subnet in the existing virtual network."
+              }
+            },
+            "newSubnetName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the additional subnet to create in the existing virtual network."
+              }
+            },
+            "newSubnetPrefix": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "IPv4 CIDR prefix of the additional subnet to create in the existing virtual network."
+              }
+            },
+            "nsgMode": {
+              "type": "string",
+              "defaultValue": "new",
+              "allowedValues": [
+                "new",
+                "existing",
+                "none"
+              ],
+              "metadata": {
+                "description": "Network Security Group mode: new (create new NSG), existing (associate existing NSG), or none."
+              }
+            },
+            "nsgName": {
+              "type": "string",
+              "defaultValue": "nsg-elrehan-pilot",
+              "metadata": {
+                "description": "Name of the Network Security Group to create (used when nsgMode is new)."
+              }
+            },
+            "existingNsgName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of an existing Network Security Group to associate (used when nsgMode is existing)."
+              }
+            },
+            "existingNsgResourceGroup": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Resource Group containing the existing NSG. Defaults to current resource group if empty."
+              }
+            },
+            "routeTableMode": {
+              "type": "string",
+              "defaultValue": "none",
+              "allowedValues": [
+                "new",
+                "existing",
+                "none"
+              ],
+              "metadata": {
+                "description": "Route Table mode: new (create new Route Table), existing (associate existing Route Table), or none."
+              }
+            },
+            "routeTableName": {
+              "type": "string",
+              "defaultValue": "rt-elrehan-pilot",
+              "metadata": {
+                "description": "Name of the Route Table to create (used when routeTableMode is new)."
+              }
+            },
+            "disableBgpRoutePropagation": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Whether to disable BGP route propagation on the created Route Table."
+              }
+            },
+            "existingRouteTableName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of an existing Route Table to associate (used when routeTableMode is existing)."
+              }
+            },
+            "existingRouteTableResourceGroup": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Resource Group containing the existing Route Table. Defaults to current resource group if empty."
+              }
+            },
+            "deployVm": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Pilot safety flag. When false, VM parameters are validated but VM deployment is skipped."
               }
             },
             "osType": {
@@ -447,151 +644,1065 @@
                 "Windows"
               ],
               "metadata": {
-                "description": "Operating System platform."
+                "description": "Operating system type for the pilot virtual machine."
               }
+            },
+            "vmName": {
+              "type": "string",
+              "defaultValue": "vm-elrehan-pilot-01",
+              "metadata": {
+                "description": "Name of the pilot virtual machine."
+              },
+              "minLength": 1,
+              "maxLength": 64
             },
             "vmSize": {
               "type": "string",
               "defaultValue": "Standard_D2s_v5",
               "metadata": {
-                "description": "The VM SKU size."
+                "description": "Compute SKU selected via Azure size-selector."
+              }
+            },
+            "selectedSubnetName": {
+              "type": "string",
+              "defaultValue": "snet-workload",
+              "metadata": {
+                "description": "Subnet name where the pilot VM NIC attaches. Must match a configured or existing subnet name."
               }
             },
             "adminUsername": {
               "type": "string",
               "defaultValue": "azureuser",
-              "minLength": 1,
-              "maxLength": 64,
               "metadata": {
                 "description": "Administrator username for the VM."
-              }
+              },
+              "minLength": 1,
+              "maxLength": 64
             },
             "adminPassword": {
               "type": "securestring",
               "defaultValue": "",
               "metadata": {
-                "description": "Administrator password for Windows VM. Required when osType is Windows."
+                "description": "Administrator password for Windows VM. Required only when deployVm is true and osType is Windows."
               }
             },
             "adminSshPublicKey": {
               "type": "securestring",
               "defaultValue": "",
               "metadata": {
-                "description": "SSH public key for Linux VM. Required when osType is Linux."
-              }
-            },
-            "subnetId": {
-              "type": "string",
-              "metadata": {
-                "description": "Subnet Resource ID where the VM NIC will be attached."
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to the VM and associated resources."
+                "description": "SSH public key for Linux VM. Required only when deployVm is true and osType is Linux."
               }
             }
           },
           "variables": {
-            "nicName": "[format('{0}-nic', parameters('vmName'))]",
+            "copy": [
+              {
+                "name": "configuredSubnetNames",
+                "count": "[length(parameters('subnets'))]",
+                "input": "[parameters('subnets')[copyIndex('configuredSubnetNames')].name]"
+              }
+            ],
+            "effectiveTags": "[if(contains(parameters('tags'), 'Microsoft.Resources/deployments'), parameters('tags')['Microsoft.Resources/deployments'], parameters('tags'))]",
             "isLinux": "[equals(parameters('osType'), 'Linux')]",
             "isWindows": "[equals(parameters('osType'), 'Windows')]",
             "hasValidLinuxAuth": "[and(and(variables('isLinux'), not(empty(parameters('adminSshPublicKey')))), or(startsWith(parameters('adminSshPublicKey'), 'ssh-rsa'), startsWith(parameters('adminSshPublicKey'), 'ssh-ed25519')))]",
             "hasValidWindowsAuth": "[and(and(and(variables('isWindows'), not(empty(parameters('adminPassword')))), greaterOrEquals(length(parameters('adminPassword')), 12)), lessOrEquals(length(parameters('adminPassword')), 123))]",
             "hasValidAuth": "[or(variables('hasValidLinuxAuth'), variables('hasValidWindowsAuth'))]",
-            "authCheck": "[if(not(variables('hasValidAuth')), fail('VM authentication error: Linux requires an RSA (ssh-rsa) or ED25519 (ssh-ed25519) SSH public key; Windows requires a password between 12 and 123 characters satisfying complexity requirements.'), true())]",
-            "subnetCheck": "[if(empty(parameters('subnetId')), fail('VM subnetId cannot be empty when provisioning compute resources.'), true())]"
+            "isNewVnetSubnetValid": "[and(and(equals(parameters('vnetMode'), 'new'), not(empty(parameters('selectedSubnetName')))), contains(variables('configuredSubnetNames'), parameters('selectedSubnetName')))]",
+            "isExistingVnetSubnetValid": "[and(and(equals(parameters('vnetMode'), 'existing'), not(empty(parameters('selectedSubnetName')))), or(and(parameters('addNewSubnet'), equals(parameters('selectedSubnetName'), parameters('newSubnetName'))), and(not(empty(parameters('existingSubnetName'))), equals(parameters('selectedSubnetName'), parameters('existingSubnetName')))))]",
+            "isSubnetValid": "[or(variables('isNewVnetSubnetValid'), variables('isExistingVnetSubnetValid'))]",
+            "authCheck": "[if(parameters('deployVm'), if(not(variables('hasValidAuth')), fail('VM deployment is enabled, but valid authentication credentials were not provided. Linux requires an RSA (ssh-rsa) or ED25519 (ssh-ed25519) SSH public key; Windows requires a password between 12 and 123 characters satisfying complexity requirements.'), true()), true())]",
+            "subnetCheck": "[if(parameters('deployVm'), if(not(variables('isSubnetValid')), fail(format('VM deployment is enabled, but the selected subnet \"{0}\" does not match any configured or existing subnet.', parameters('selectedSubnetName'))), true()), true())]",
+            "existingVnetCheck": "[if(equals(parameters('vnetMode'), 'existing'), if(empty(parameters('existingVnetName')), fail('vnetMode is set to existing, but existingVnetName was not provided.'), true()), true())]",
+            "existingNsgCheck": "[if(equals(parameters('nsgMode'), 'existing'), if(empty(parameters('existingNsgName')), fail('nsgMode is set to existing, but existingNsgName was not provided.'), true()), true())]",
+            "existingRtCheck": "[if(equals(parameters('routeTableMode'), 'existing'), if(empty(parameters('existingRouteTableName')), fail('routeTableMode is set to existing, but existingRouteTableName was not provided.'), true()), true())]",
+            "effectiveVnetRg": "[if(empty(parameters('existingVnetResourceGroup')), resourceGroup().name, parameters('existingVnetResourceGroup'))]",
+            "effectiveNsgRg": "[if(empty(parameters('existingNsgResourceGroup')), resourceGroup().name, parameters('existingNsgResourceGroup'))]",
+            "effectiveRtRg": "[if(empty(parameters('existingRouteTableResourceGroup')), resourceGroup().name, parameters('existingRouteTableResourceGroup'))]"
           },
-          "resources": [
-            {
-              "type": "Microsoft.Network/networkInterfaces",
-              "apiVersion": "2024-05-01",
-              "name": "[variables('nicName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
+          "resources": {
+            "nsgModule": {
+              "condition": "[and(equals(parameters('nsgMode'), 'new'), variables('existingNsgCheck'))]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "nsg-deployment",
               "properties": {
-                "ipConfigurations": [
-                  {
-                    "name": "ipconfig1",
-                    "properties": {
-                      "subnet": {
-                        "id": "[if(and(variables('authCheck'), variables('subnetCheck')), parameters('subnetId'), parameters('subnetId'))]"
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "location": {
+                    "value": "[parameters('location')]"
+                  },
+                  "nsgName": {
+                    "value": "[parameters('nsgName')]"
+                  },
+                  "osType": {
+                    "value": "[parameters('osType')]"
+                  },
+                  "tags": {
+                    "value": "[variables('effectiveTags')]"
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "languageVersion": "2.0",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.49.2.45890",
+                      "templateHash": "16188813905079971360"
+                    }
+                  },
+                  "definitions": {
+                    "securityRuleType": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "metadata": {
+                            "description": "Name of the security rule."
+                          }
+                        },
+                        "properties": {
+                          "type": "object",
+                          "properties": {
+                            "description": {
+                              "type": "string",
+                              "nullable": true,
+                              "metadata": {
+                                "description": "Rule description."
+                              }
+                            },
+                            "protocol": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Network protocol: Tcp, Udp, Icmp, Esp, Ah, or Asterisk."
+                              }
+                            },
+                            "sourcePortRange": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Source port or range (*, 80, 1024-65535)."
+                              }
+                            },
+                            "destinationPortRange": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Destination port or range (*, 22, 80, 443, 3389)."
+                              }
+                            },
+                            "sourceAddressPrefix": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Source address prefix (CIDR, ServiceTag, or VirtualNetwork). Never exposed to internet by default."
+                              }
+                            },
+                            "destinationAddressPrefix": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Destination address prefix."
+                              }
+                            },
+                            "access": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Access: Allow or Deny."
+                              }
+                            },
+                            "priority": {
+                              "type": "int",
+                              "metadata": {
+                                "description": "Priority between 100 and 4096."
+                              }
+                            },
+                            "direction": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Direction: Inbound or Outbound."
+                              }
+                            }
+                          },
+                          "metadata": {
+                            "description": "Security rule properties."
+                          }
+                        }
                       },
-                      "privateIPAllocationMethod": "Dynamic"
+                      "metadata": {
+                        "description": "Security rule definition type."
+                      }
+                    }
+                  },
+                  "parameters": {
+                    "location": {
+                      "type": "string",
+                      "defaultValue": "[resourceGroup().location]",
+                      "metadata": {
+                        "description": "Azure region for the network security group."
+                      }
+                    },
+                    "nsgName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the Network Security Group."
+                      }
+                    },
+                    "tags": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Tags to apply to the NSG."
+                      }
+                    },
+                    "osType": {
+                      "type": "string",
+                      "defaultValue": "Linux",
+                      "allowedValues": [
+                        "Linux",
+                        "Windows"
+                      ],
+                      "metadata": {
+                        "description": "Operating system type to configure default inbound management rule."
+                      }
+                    },
+                    "customSecurityRules": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/securityRuleType"
+                      },
+                      "defaultValue": [],
+                      "metadata": {
+                        "description": "Custom security rules to configure in the NSG."
+                      }
+                    }
+                  },
+                  "variables": {
+                    "defaultManagementRule": {
+                      "name": "[if(equals(parameters('osType'), 'Linux'), 'Allow-SSH-Internal', 'Allow-RDP-Internal')]",
+                      "properties": {
+                        "description": "Allows remote management inbound from internal VirtualNetwork only (secure default).",
+                        "protocol": "Tcp",
+                        "sourcePortRange": "*",
+                        "destinationPortRange": "[if(equals(parameters('osType'), 'Linux'), '22', '3389')]",
+                        "sourceAddressPrefix": "VirtualNetwork",
+                        "destinationAddressPrefix": "*",
+                        "access": "Allow",
+                        "priority": 1000,
+                        "direction": "Inbound"
+                      }
+                    },
+                    "effectiveRules": "[if(empty(parameters('customSecurityRules')), createArray(variables('defaultManagementRule')), parameters('customSecurityRules'))]"
+                  },
+                  "resources": {
+                    "nsg": {
+                      "type": "Microsoft.Network/networkSecurityGroups",
+                      "apiVersion": "2024-05-01",
+                      "name": "[parameters('nsgName')]",
+                      "location": "[parameters('location')]",
+                      "tags": "[parameters('tags')]",
+                      "properties": {
+                        "copy": [
+                          {
+                            "name": "securityRules",
+                            "count": "[length(variables('effectiveRules'))]",
+                            "input": {
+                              "name": "[variables('effectiveRules')[copyIndex('securityRules')].name]",
+                              "properties": {
+                                "description": "[coalesce(tryGet(variables('effectiveRules')[copyIndex('securityRules')].properties, 'description'), 'Custom security rule')]",
+                                "protocol": "[variables('effectiveRules')[copyIndex('securityRules')].properties.protocol]",
+                                "sourcePortRange": "[variables('effectiveRules')[copyIndex('securityRules')].properties.sourcePortRange]",
+                                "destinationPortRange": "[variables('effectiveRules')[copyIndex('securityRules')].properties.destinationPortRange]",
+                                "sourceAddressPrefix": "[variables('effectiveRules')[copyIndex('securityRules')].properties.sourceAddressPrefix]",
+                                "destinationAddressPrefix": "[variables('effectiveRules')[copyIndex('securityRules')].properties.destinationAddressPrefix]",
+                                "access": "[variables('effectiveRules')[copyIndex('securityRules')].properties.access]",
+                                "priority": "[variables('effectiveRules')[copyIndex('securityRules')].properties.priority]",
+                                "direction": "[variables('effectiveRules')[copyIndex('securityRules')].properties.direction]"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "outputs": {
+                    "nsgId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Resource ID of the created Network Security Group."
+                      },
+                      "value": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+                    },
+                    "nsgName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the created Network Security Group."
+                      },
+                      "value": "[parameters('nsgName')]"
                     }
                   }
-                ]
+                }
               }
             },
-            {
-              "type": "Microsoft.Compute/virtualMachines",
-              "apiVersion": "2024-07-01",
-              "name": "[parameters('vmName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
+            "routeTableModule": {
+              "condition": "[and(equals(parameters('routeTableMode'), 'new'), variables('existingRtCheck'))]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "routetable-deployment",
               "properties": {
-                "hardwareProfile": {
-                  "vmSize": "[parameters('vmSize')]"
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
                 },
-                "storageProfile": {
-                  "imageReference": "[if(variables('isLinux'), createObject('publisher', 'Canonical', 'offer', '0001-com-ubuntu-server-jammy', 'sku', '22_04-lts-gen2', 'version', 'latest'), createObject('publisher', 'MicrosoftWindowsServer', 'offer', 'WindowsServer', 'sku', '2022-datacenter-azure-edition', 'version', 'latest'))]",
-                  "osDisk": {
-                    "name": "[format('{0}-osdisk', parameters('vmName'))]",
-                    "createOption": "FromImage",
-                    "caching": "ReadWrite",
-                    "managedDisk": {
-                      "storageAccountType": "Premium_LRS"
-                    }
+                "mode": "Incremental",
+                "parameters": {
+                  "location": {
+                    "value": "[parameters('location')]"
+                  },
+                  "routeTableName": {
+                    "value": "[parameters('routeTableName')]"
+                  },
+                  "disableBgpRoutePropagation": {
+                    "value": "[parameters('disableBgpRoutePropagation')]"
+                  },
+                  "tags": {
+                    "value": "[variables('effectiveTags')]"
                   }
                 },
-                "osProfile": {
-                  "computerName": "[take(parameters('vmName'), 15)]",
-                  "adminUsername": "[parameters('adminUsername')]",
-                  "adminPassword": "[if(variables('isWindows'), parameters('adminPassword'), null())]",
-                  "linuxConfiguration": "[if(variables('isLinux'), createObject('disablePasswordAuthentication', true(), 'ssh', createObject('publicKeys', createArray(createObject('path', format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername')), 'keyData', parameters('adminSshPublicKey'))))), null())]"
-                },
-                "networkProfile": {
-                  "networkInterfaces": [
-                    {
-                      "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "languageVersion": "2.0",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.49.2.45890",
+                      "templateHash": "3865398150347541932"
                     }
-                  ]
+                  },
+                  "definitions": {
+                    "routeType": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "metadata": {
+                            "description": "Name of the route."
+                          }
+                        },
+                        "properties": {
+                          "type": "object",
+                          "properties": {
+                            "addressPrefix": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Destination CIDR address prefix."
+                              }
+                            },
+                            "nextHopType": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "Next-hop type: VirtualAppliance, Internet, None, VirtualNetworkGateway, VnetLocal."
+                              }
+                            },
+                            "nextHopIpAddress": {
+                              "type": "string",
+                              "nullable": true,
+                              "metadata": {
+                                "description": "Next-hop IP address (required when nextHopType is VirtualAppliance)."
+                              }
+                            }
+                          },
+                          "metadata": {
+                            "description": "Route properties."
+                          }
+                        }
+                      },
+                      "metadata": {
+                        "description": "Route definition object type."
+                      }
+                    }
+                  },
+                  "parameters": {
+                    "location": {
+                      "type": "string",
+                      "defaultValue": "[resourceGroup().location]",
+                      "metadata": {
+                        "description": "Azure region for the route table resources."
+                      }
+                    },
+                    "routeTableName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "metadata": {
+                        "description": "Name of the Route Table."
+                      }
+                    },
+                    "disableBgpRoutePropagation": {
+                      "type": "bool",
+                      "defaultValue": false,
+                      "metadata": {
+                        "description": "Whether to disable BGP route propagation."
+                      }
+                    },
+                    "tags": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Tags to apply to the route table."
+                      }
+                    },
+                    "routes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/routeType"
+                      },
+                      "defaultValue": [],
+                      "metadata": {
+                        "description": "List of custom routes to add to the route table."
+                      }
+                    }
+                  },
+                  "resources": {
+                    "routeTable": {
+                      "type": "Microsoft.Network/routeTables",
+                      "apiVersion": "2024-05-01",
+                      "name": "[parameters('routeTableName')]",
+                      "location": "[parameters('location')]",
+                      "tags": "[parameters('tags')]",
+                      "properties": {
+                        "copy": [
+                          {
+                            "name": "routes",
+                            "count": "[length(parameters('routes'))]",
+                            "input": {
+                              "name": "[parameters('routes')[copyIndex('routes')].name]",
+                              "properties": {
+                                "addressPrefix": "[parameters('routes')[copyIndex('routes')].properties.addressPrefix]",
+                                "nextHopType": "[parameters('routes')[copyIndex('routes')].properties.nextHopType]",
+                                "nextHopIpAddress": "[if(equals(parameters('routes')[copyIndex('routes')].properties.nextHopType, 'VirtualAppliance'), tryGet(parameters('routes')[copyIndex('routes')].properties, 'nextHopIpAddress'), null())]"
+                              }
+                            }
+                          }
+                        ],
+                        "disableBgpRoutePropagation": "[parameters('disableBgpRoutePropagation')]"
+                      }
+                    }
+                  },
+                  "outputs": {
+                    "routeTableId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Resource ID of the created Route Table."
+                      },
+                      "value": "[resourceId('Microsoft.Network/routeTables', parameters('routeTableName'))]"
+                    },
+                    "routeTableName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the created Route Table."
+                      },
+                      "value": "[parameters('routeTableName')]"
+                    }
+                  }
+                }
+              }
+            },
+            "networkModule": {
+              "condition": "[equals(parameters('vnetMode'), 'new')]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "network-deployment",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "location": {
+                    "value": "[parameters('location')]"
+                  },
+                  "vnetName": {
+                    "value": "[parameters('vnetName')]"
+                  },
+                  "addressPrefix": {
+                    "value": "[parameters('addressPrefix')]"
+                  },
+                  "subnets": {
+                    "value": "[parameters('subnets')]"
+                  },
+                  "networkSecurityGroupId": "[if(equals(parameters('nsgMode'), 'new'), createObject('value', coalesce(tryGet(if(and(equals(parameters('nsgMode'), 'new'), variables('existingNsgCheck')), reference('nsgModule'), null()), 'outputs', 'nsgId', 'value'), '')), if(and(equals(parameters('nsgMode'), 'existing'), variables('existingNsgCheck')), createObject('value', resourceId(variables('effectiveNsgRg'), 'Microsoft.Network/networkSecurityGroups', parameters('existingNsgName'))), createObject('value', '')))]",
+                  "routeTableId": "[if(equals(parameters('routeTableMode'), 'new'), createObject('value', coalesce(tryGet(if(and(equals(parameters('routeTableMode'), 'new'), variables('existingRtCheck')), reference('routeTableModule'), null()), 'outputs', 'routeTableId', 'value'), '')), if(and(equals(parameters('routeTableMode'), 'existing'), variables('existingRtCheck')), createObject('value', resourceId(variables('effectiveRtRg'), 'Microsoft.Network/routeTables', parameters('existingRouteTableName'))), createObject('value', '')))]",
+                  "tags": {
+                    "value": "[variables('effectiveTags')]"
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "languageVersion": "2.0",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.49.2.45890",
+                      "templateHash": "17133933098235788580"
+                    }
+                  },
+                  "definitions": {
+                    "subnetType": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "metadata": {
+                            "description": "Name of the subnet."
+                          }
+                        },
+                        "addressPrefix": {
+                          "type": "string",
+                          "metadata": {
+                            "description": "IPv4 CIDR address prefix for the subnet."
+                          }
+                        }
+                      },
+                      "metadata": {
+                        "description": "Subnet definition with name and addressPrefix."
+                      }
+                    }
+                  },
+                  "parameters": {
+                    "location": {
+                      "type": "string",
+                      "defaultValue": "[resourceGroup().location]",
+                      "metadata": {
+                        "description": "Azure region for the virtual network resources."
+                      }
+                    },
+                    "vnetName": {
+                      "type": "string",
+                      "minLength": 2,
+                      "maxLength": 64,
+                      "metadata": {
+                        "description": "The name of the virtual network."
+                      }
+                    },
+                    "addressPrefix": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "The top-level IPv4 CIDR address prefix for the virtual network."
+                      }
+                    },
+                    "subnets": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/subnetType"
+                      },
+                      "minLength": 1,
+                      "metadata": {
+                        "description": "List of subnet objects with name and addressPrefix properties."
+                      }
+                    },
+                    "tags": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Tags to apply to the virtual network."
+                      }
+                    },
+                    "networkSecurityGroupId": {
+                      "type": "string",
+                      "defaultValue": "",
+                      "metadata": {
+                        "description": "Optional default Network Security Group ID to attach to subnets."
+                      }
+                    },
+                    "routeTableId": {
+                      "type": "string",
+                      "defaultValue": "",
+                      "metadata": {
+                        "description": "Optional default Route Table ID to attach to subnets."
+                      }
+                    }
+                  },
+                  "variables": {
+                    "copy": [
+                      {
+                        "name": "subnetNames",
+                        "count": "[length(parameters('subnets'))]",
+                        "input": "[toLower(parameters('subnets')[copyIndex('subnetNames')].name)]"
+                      }
+                    ],
+                    "hasDuplicateSubnetNames": "[not(equals(length(union(variables('subnetNames'), createArray())), length(variables('subnetNames'))))]",
+                    "subnetNameCheck": "[if(variables('hasDuplicateSubnetNames'), fail('Duplicate subnet names detected in subnets array. Subnet names must be unique.'), true())]"
+                  },
+                  "resources": {
+                    "vnet": {
+                      "type": "Microsoft.Network/virtualNetworks",
+                      "apiVersion": "2024-05-01",
+                      "name": "[parameters('vnetName')]",
+                      "location": "[parameters('location')]",
+                      "tags": "[parameters('tags')]",
+                      "properties": {
+                        "copy": [
+                          {
+                            "name": "subnets",
+                            "count": "[length(parameters('subnets'))]",
+                            "input": {
+                              "name": "[parameters('subnets')[copyIndex('subnets')].name]",
+                              "properties": {
+                                "addressPrefix": "[parameters('subnets')[copyIndex('subnets')].addressPrefix]",
+                                "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]",
+                                "routeTable": "[if(not(empty(parameters('routeTableId'))), createObject('id', parameters('routeTableId')), null())]"
+                              }
+                            }
+                          }
+                        ],
+                        "addressSpace": {
+                          "addressPrefixes": [
+                            "[if(variables('subnetNameCheck'), parameters('addressPrefix'), parameters('addressPrefix'))]"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "outputs": {
+                    "vnetId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "The resource ID of the created virtual network."
+                      },
+                      "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+                    },
+                    "vnetName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "The name of the created virtual network."
+                      },
+                      "value": "[parameters('vnetName')]"
+                    },
+                    "subnets": {
+                      "type": "array",
+                      "metadata": {
+                        "description": "The array of created subnets."
+                      },
+                      "copy": {
+                        "count": "[length(parameters('subnets'))]",
+                        "input": {
+                          "name": "[parameters('subnets')[copyIndex()].name]",
+                          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnets')[copyIndex()].name)]",
+                          "addressPrefix": "[parameters('subnets')[copyIndex()].addressPrefix]"
+                        }
+                      }
+                    }
+                  }
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                "nsgModule",
+                "routeTableModule"
+              ]
+            },
+            "existingVnetSubnetModule": {
+              "condition": "[and(and(equals(parameters('vnetMode'), 'existing'), parameters('addNewSubnet')), variables('existingVnetCheck'))]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "existing-vnet-subnet-deployment",
+              "resourceGroup": "[variables('effectiveVnetRg')]",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "vnetName": {
+                    "value": "[parameters('existingVnetName')]"
+                  },
+                  "subnetName": {
+                    "value": "[parameters('newSubnetName')]"
+                  },
+                  "addressPrefix": {
+                    "value": "[parameters('newSubnetPrefix')]"
+                  },
+                  "networkSecurityGroupId": "[if(equals(parameters('nsgMode'), 'new'), createObject('value', coalesce(tryGet(if(and(equals(parameters('nsgMode'), 'new'), variables('existingNsgCheck')), reference('nsgModule'), null()), 'outputs', 'nsgId', 'value'), '')), if(and(equals(parameters('nsgMode'), 'existing'), variables('existingNsgCheck')), createObject('value', resourceId(variables('effectiveNsgRg'), 'Microsoft.Network/networkSecurityGroups', parameters('existingNsgName'))), createObject('value', '')))]",
+                  "routeTableId": "[if(equals(parameters('routeTableMode'), 'new'), createObject('value', coalesce(tryGet(if(and(equals(parameters('routeTableMode'), 'new'), variables('existingRtCheck')), reference('routeTableModule'), null()), 'outputs', 'routeTableId', 'value'), '')), if(and(equals(parameters('routeTableMode'), 'existing'), variables('existingRtCheck')), createObject('value', resourceId(variables('effectiveRtRg'), 'Microsoft.Network/routeTables', parameters('existingRouteTableName'))), createObject('value', '')))]"
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.49.2.45890",
+                      "templateHash": "58335949522815064"
+                    }
+                  },
+                  "parameters": {
+                    "vnetName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the parent Virtual Network."
+                      }
+                    },
+                    "subnetName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the subnet to create or update."
+                      }
+                    },
+                    "addressPrefix": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "IPv4 CIDR address prefix for the subnet."
+                      }
+                    },
+                    "networkSecurityGroupId": {
+                      "type": "string",
+                      "defaultValue": "",
+                      "metadata": {
+                        "description": "Optional Network Security Group ID to associate with the subnet."
+                      }
+                    },
+                    "routeTableId": {
+                      "type": "string",
+                      "defaultValue": "",
+                      "metadata": {
+                        "description": "Optional Route Table ID to associate with the subnet."
+                      }
+                    }
+                  },
+                  "resources": [
+                    {
+                      "type": "Microsoft.Network/virtualNetworks/subnets",
+                      "apiVersion": "2024-05-01",
+                      "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
+                      "properties": {
+                        "addressPrefix": "[parameters('addressPrefix')]",
+                        "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]",
+                        "routeTable": "[if(not(empty(parameters('routeTableId'))), createObject('id', parameters('routeTableId')), null())]"
+                      }
+                    }
+                  ],
+                  "outputs": {
+                    "subnetId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Resource ID of the created or updated subnet."
+                      },
+                      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName'))]"
+                    },
+                    "subnetName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the subnet."
+                      },
+                      "value": "[parameters('subnetName')]"
+                    }
+                  }
+                }
+              },
+              "dependsOn": [
+                "nsgModule",
+                "routeTableModule"
+              ]
+            },
+            "computeModule": {
+              "condition": "[parameters('deployVm')]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "compute-deployment",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "location": {
+                    "value": "[parameters('location')]"
+                  },
+                  "vmName": {
+                    "value": "[parameters('vmName')]"
+                  },
+                  "osType": {
+                    "value": "[parameters('osType')]"
+                  },
+                  "vmSize": {
+                    "value": "[parameters('vmSize')]"
+                  },
+                  "adminUsername": {
+                    "value": "[parameters('adminUsername')]"
+                  },
+                  "adminPassword": {
+                    "value": "[parameters('adminPassword')]"
+                  },
+                  "adminSshPublicKey": {
+                    "value": "[parameters('adminSshPublicKey')]"
+                  },
+                  "subnetId": "[if(and(variables('authCheck'), variables('subnetCheck')), if(equals(parameters('vnetMode'), 'new'), createObject('value', format('{0}/subnets/{1}', tryGet(if(equals(parameters('vnetMode'), 'new'), reference('networkModule'), null()), 'outputs', 'vnetId', 'value'), parameters('selectedSubnetName'))), if(and(parameters('addNewSubnet'), equals(parameters('selectedSubnetName'), parameters('newSubnetName'))), createObject('value', format('{0}/subnets/{1}', if(equals(parameters('vnetMode'), 'new'), coalesce(tryGet(if(equals(parameters('vnetMode'), 'new'), reference('networkModule'), null()), 'outputs', 'vnetId', 'value'), ''), resourceId(variables('effectiveVnetRg'), 'Microsoft.Network/virtualNetworks', parameters('existingVnetName'))), parameters('newSubnetName'))), createObject('value', format('{0}/subnets/{1}', if(equals(parameters('vnetMode'), 'new'), coalesce(tryGet(if(equals(parameters('vnetMode'), 'new'), reference('networkModule'), null()), 'outputs', 'vnetId', 'value'), ''), resourceId(variables('effectiveVnetRg'), 'Microsoft.Network/virtualNetworks', parameters('existingVnetName'))), parameters('selectedSubnetName'))))), createObject('value', ''))]",
+                  "tags": {
+                    "value": "[variables('effectiveTags')]"
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.49.2.45890",
+                      "templateHash": "9815973814678113446"
+                    }
+                  },
+                  "parameters": {
+                    "location": {
+                      "type": "string",
+                      "defaultValue": "[resourceGroup().location]",
+                      "metadata": {
+                        "description": "Azure region for compute resources."
+                      }
+                    },
+                    "vmName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "metadata": {
+                        "description": "Name of the Virtual Machine."
+                      }
+                    },
+                    "osType": {
+                      "type": "string",
+                      "defaultValue": "Linux",
+                      "allowedValues": [
+                        "Linux",
+                        "Windows"
+                      ],
+                      "metadata": {
+                        "description": "Operating System platform."
+                      }
+                    },
+                    "vmSize": {
+                      "type": "string",
+                      "defaultValue": "Standard_D2s_v5",
+                      "metadata": {
+                        "description": "The VM SKU size."
+                      }
+                    },
+                    "adminUsername": {
+                      "type": "string",
+                      "defaultValue": "azureuser",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "metadata": {
+                        "description": "Administrator username for the VM."
+                      }
+                    },
+                    "adminPassword": {
+                      "type": "securestring",
+                      "defaultValue": "",
+                      "metadata": {
+                        "description": "Administrator password for Windows VM. Required when osType is Windows."
+                      }
+                    },
+                    "adminSshPublicKey": {
+                      "type": "securestring",
+                      "defaultValue": "",
+                      "metadata": {
+                        "description": "SSH public key for Linux VM. Required when osType is Linux."
+                      }
+                    },
+                    "subnetId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Subnet Resource ID where the VM NIC will be attached."
+                      }
+                    },
+                    "tags": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Tags to apply to the VM and associated resources."
+                      }
+                    }
+                  },
+                  "variables": {
+                    "nicName": "[format('{0}-nic', parameters('vmName'))]",
+                    "isLinux": "[equals(parameters('osType'), 'Linux')]",
+                    "isWindows": "[equals(parameters('osType'), 'Windows')]",
+                    "hasValidLinuxAuth": "[and(and(variables('isLinux'), not(empty(parameters('adminSshPublicKey')))), or(startsWith(parameters('adminSshPublicKey'), 'ssh-rsa'), startsWith(parameters('adminSshPublicKey'), 'ssh-ed25519')))]",
+                    "hasValidWindowsAuth": "[and(and(and(variables('isWindows'), not(empty(parameters('adminPassword')))), greaterOrEquals(length(parameters('adminPassword')), 12)), lessOrEquals(length(parameters('adminPassword')), 123))]",
+                    "hasValidAuth": "[or(variables('hasValidLinuxAuth'), variables('hasValidWindowsAuth'))]",
+                    "authCheck": "[if(not(variables('hasValidAuth')), fail('VM authentication error: Linux requires an RSA (ssh-rsa) or ED25519 (ssh-ed25519) SSH public key; Windows requires a password between 12 and 123 characters satisfying complexity requirements.'), true())]",
+                    "subnetCheck": "[if(empty(parameters('subnetId')), fail('VM subnetId cannot be empty when provisioning compute resources.'), true())]"
+                  },
+                  "resources": [
+                    {
+                      "type": "Microsoft.Network/networkInterfaces",
+                      "apiVersion": "2024-05-01",
+                      "name": "[variables('nicName')]",
+                      "location": "[parameters('location')]",
+                      "tags": "[parameters('tags')]",
+                      "properties": {
+                        "ipConfigurations": [
+                          {
+                            "name": "ipconfig1",
+                            "properties": {
+                              "subnet": {
+                                "id": "[if(and(variables('authCheck'), variables('subnetCheck')), parameters('subnetId'), parameters('subnetId'))]"
+                              },
+                              "privateIPAllocationMethod": "Dynamic"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "type": "Microsoft.Compute/virtualMachines",
+                      "apiVersion": "2024-07-01",
+                      "name": "[parameters('vmName')]",
+                      "location": "[parameters('location')]",
+                      "tags": "[parameters('tags')]",
+                      "properties": {
+                        "hardwareProfile": {
+                          "vmSize": "[parameters('vmSize')]"
+                        },
+                        "storageProfile": {
+                          "imageReference": "[if(variables('isLinux'), createObject('publisher', 'Canonical', 'offer', '0001-com-ubuntu-server-jammy', 'sku', '22_04-lts-gen2', 'version', 'latest'), createObject('publisher', 'MicrosoftWindowsServer', 'offer', 'WindowsServer', 'sku', '2022-datacenter-azure-edition', 'version', 'latest'))]",
+                          "osDisk": {
+                            "name": "[format('{0}-osdisk', parameters('vmName'))]",
+                            "createOption": "FromImage",
+                            "caching": "ReadWrite",
+                            "managedDisk": {
+                              "storageAccountType": "Premium_LRS"
+                            }
+                          }
+                        },
+                        "osProfile": {
+                          "computerName": "[take(parameters('vmName'), 15)]",
+                          "adminUsername": "[parameters('adminUsername')]",
+                          "adminPassword": "[if(variables('isWindows'), parameters('adminPassword'), null())]",
+                          "linuxConfiguration": "[if(variables('isLinux'), createObject('disablePasswordAuthentication', true(), 'ssh', createObject('publicKeys', createArray(createObject('path', format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername')), 'keyData', parameters('adminSshPublicKey'))))), null())]"
+                        },
+                        "networkProfile": {
+                          "networkInterfaces": [
+                            {
+                              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                            }
+                          ]
+                        }
+                      },
+                      "dependsOn": [
+                        "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                      ]
+                    }
+                  ],
+                  "outputs": {
+                    "vmId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Resource ID of the created virtual machine."
+                      },
+                      "value": "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]"
+                    },
+                    "vmName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the created virtual machine."
+                      },
+                      "value": "[parameters('vmName')]"
+                    },
+                    "nicId": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Resource ID of the created network interface."
+                      },
+                      "value": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                    }
+                  }
+                }
+              },
+              "dependsOn": [
+                "networkModule"
               ]
             }
-          ],
+          },
           "outputs": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Deployment region."
+              },
+              "value": "[parameters('location')]"
+            },
+            "vnetMode": {
+              "type": "string",
+              "metadata": {
+                "description": "Deployment mode used for Virtual Network."
+              },
+              "value": "[parameters('vnetMode')]"
+            },
+            "vnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the virtual network."
+              },
+              "value": "[if(equals(parameters('vnetMode'), 'new'), coalesce(tryGet(if(equals(parameters('vnetMode'), 'new'), reference('networkModule'), null()), 'outputs', 'vnetId', 'value'), ''), resourceId(variables('effectiveVnetRg'), 'Microsoft.Network/virtualNetworks', parameters('existingVnetName')))]"
+            },
+            "vnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the virtual network."
+              },
+              "value": "[if(equals(parameters('vnetMode'), 'new'), coalesce(tryGet(if(equals(parameters('vnetMode'), 'new'), reference('networkModule'), null()), 'outputs', 'vnetName', 'value'), ''), parameters('existingVnetName'))]"
+            },
+            "nsgId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the associated Network Security Group, if configured."
+              },
+              "value": "[if(equals(parameters('nsgMode'), 'new'), coalesce(tryGet(if(and(equals(parameters('nsgMode'), 'new'), variables('existingNsgCheck')), reference('nsgModule'), null()), 'outputs', 'nsgId', 'value'), ''), if(and(equals(parameters('nsgMode'), 'existing'), variables('existingNsgCheck')), resourceId(variables('effectiveNsgRg'), 'Microsoft.Network/networkSecurityGroups', parameters('existingNsgName')), ''))]"
+            },
+            "routeTableId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the associated Route Table, if configured."
+              },
+              "value": "[if(equals(parameters('routeTableMode'), 'new'), coalesce(tryGet(if(and(equals(parameters('routeTableMode'), 'new'), variables('existingRtCheck')), reference('routeTableModule'), null()), 'outputs', 'routeTableId', 'value'), ''), if(and(equals(parameters('routeTableMode'), 'existing'), variables('existingRtCheck')), resourceId(variables('effectiveRtRg'), 'Microsoft.Network/routeTables', parameters('existingRouteTableName')), ''))]"
+            },
+            "targetSubnetAttached": {
+              "type": "string",
+              "metadata": {
+                "description": "Target subnet attached to the VM NIC."
+              },
+              "value": "[if(parameters('deployVm'), parameters('selectedSubnetName'), '')]"
+            },
+            "vmProvisioned": {
+              "type": "bool",
+              "metadata": {
+                "description": "Indicates whether VM provisioning was activated in this execution."
+              },
+              "value": "[parameters('deployVm')]"
+            },
+            "authConfigured": {
+              "type": "bool",
+              "metadata": {
+                "description": "Indicates whether required authentication parameters were successfully provided."
+              },
+              "value": "[variables('hasValidAuth')]"
+            },
             "vmId": {
               "type": "string",
               "metadata": {
-                "description": "Resource ID of the created virtual machine."
+                "description": "Resource ID of the virtual machine if provisioned."
               },
-              "value": "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]"
-            },
-            "vmName": {
-              "type": "string",
-              "metadata": {
-                "description": "Name of the created virtual machine."
-              },
-              "value": "[parameters('vmName')]"
-            },
-            "nicId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the created network interface."
-              },
-              "value": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+              "value": "[if(parameters('deployVm'), coalesce(tryGet(if(parameters('deployVm'), reference('computeModule'), null()), 'outputs', 'vmId', 'value'), ''), '')]"
             }
           }
         }
       },
       "dependsOn": [
-        "networkModule"
+        "targetResourceGroup"
       ]
     }
   },
@@ -615,49 +1726,56 @@
       "metadata": {
         "description": "Resource ID of the virtual network."
       },
-      "value": "[reference('networkModule').outputs.vnetId.value]"
+      "value": "[reference('rgDeployment').outputs.vnetId.value]"
     },
     "vnetName": {
       "type": "string",
       "metadata": {
         "description": "Name of the virtual network."
       },
-      "value": "[reference('networkModule').outputs.vnetName.value]"
+      "value": "[reference('rgDeployment').outputs.vnetName.value]"
     },
-    "subnets": {
-      "type": "array",
+    "nsgId": {
+      "type": "string",
       "metadata": {
-        "description": "Created subnets metadata."
+        "description": "Resource ID of the associated Network Security Group, if configured."
       },
-      "value": "[reference('networkModule').outputs.subnets.value]"
+      "value": "[reference('rgDeployment').outputs.nsgId.value]"
+    },
+    "routeTableId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the associated Route Table, if configured."
+      },
+      "value": "[reference('rgDeployment').outputs.routeTableId.value]"
     },
     "targetSubnetAttached": {
       "type": "string",
       "metadata": {
         "description": "Target subnet attached to the VM NIC."
       },
-      "value": "[if(parameters('deployVm'), parameters('selectedSubnetName'), '')]"
+      "value": "[reference('rgDeployment').outputs.targetSubnetAttached.value]"
     },
     "vmProvisioned": {
       "type": "bool",
       "metadata": {
         "description": "Indicates whether VM provisioning was activated in this execution."
       },
-      "value": "[parameters('deployVm')]"
+      "value": "[and(and(reference('rgDeployment').outputs.vmProvisioned.value, variables('authCheck')), variables('subnetCheck'))]"
     },
     "authConfigured": {
       "type": "bool",
       "metadata": {
         "description": "Indicates whether required authentication parameters were successfully provided."
       },
-      "value": "[variables('hasValidAuth')]"
+      "value": "[reference('rgDeployment').outputs.authConfigured.value]"
     },
     "vmId": {
       "type": "string",
       "metadata": {
         "description": "Resource ID of the virtual machine if provisioned."
       },
-      "value": "[if(parameters('deployVm'), reference('computeModule').outputs.vmId.value, '')]"
+      "value": "[reference('rgDeployment').outputs.vmId.value]"
     }
   }
 }

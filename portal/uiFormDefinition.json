@@ -3,12 +3,12 @@
   "view": {
     "kind": "Form",
     "properties": {
-      "title": "Elrehan Azure Infrastructure Deployment Wizard",
+      "title": "Elrehan Azure Infrastructure Deployment Studio",
       "steps": [
         {
           "name": "basics",
           "label": "Basics",
-          "description": "Configure the core deployment target, subscription, resource group, and primary Azure region.",
+          "description": "Configure the deployment target, subscription, resource group, primary region, and tags.",
           "elements": [
             {
               "name": "resourceScope",
@@ -34,51 +34,80 @@
               "resources": [
                 "Microsoft.Resources/deployments"
               ]
+            },
+            {
+              "name": "costNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Cost Awareness: Network resources carry standard cloud charges. Virtual Machine deployment is optional and disabled by default (Pilot Safety Mode)."
+              }
             }
           ]
         },
         {
           "name": "networking",
           "label": "Networking",
-          "description": "Configure Virtual Network address space and dynamic subnets.",
+          "description": "Create a new Virtual Network with dynamic subnets, or deploy into an existing Virtual Network across resource groups.",
           "elements": [
+            {
+              "name": "vnetModeOptions",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "Virtual Network Deployment Mode",
+              "defaultValue": "new",
+              "toolTip": "Select whether to provision a new Virtual Network or reference an existing Virtual Network.",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Create new virtual network",
+                    "value": "new"
+                  },
+                  {
+                    "label": "Use existing virtual network (same or cross-resource group)",
+                    "value": "existing"
+                  }
+                ]
+              }
+            },
             {
               "name": "vnetName",
               "type": "Microsoft.Common.TextBox",
               "label": "Virtual Network Name",
               "defaultValue": "vnet-elrehan-pilot",
-              "toolTip": "Specify the name of the virtual network.",
+              "toolTip": "Name of the new Virtual Network (2-64 characters, alphanumeric and hyphens).",
               "constraints": {
                 "required": true,
                 "validations": [
                   {
                     "regex": "^[a-zA-Z0-9-_.]{2,64}$",
-                    "message": "VNet name must be between 2 and 64 characters (alphanumeric, hyphens, or underscores)."
+                    "message": "VNet name must be between 2 and 64 characters."
                   }
                 ]
-              }
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
             },
             {
               "name": "addressPrefix",
               "type": "Microsoft.Common.TextBox",
               "label": "VNet Address Space (IPv4 CIDR)",
               "defaultValue": "10.0.0.0/16",
-              "toolTip": "Specify the top-level IPv4 CIDR address block for the virtual network.",
+              "toolTip": "The top-level IPv4 address prefix in CIDR notation (e.g. 10.0.0.0/16).",
               "constraints": {
                 "required": true,
                 "validations": [
                   {
                     "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
-                    "message": "Must be a valid IPv4 CIDR prefix (e.g. 10.0.0.0/16)."
+                    "message": "Must be a valid IPv4 CIDR prefix."
                   }
                 ]
-              }
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
             },
             {
               "name": "subnetsGrid",
               "type": "Microsoft.Common.EditableGrid",
               "label": "Subnets Configuration",
-              "ariaLabel": "Subnet configuration table with dynamic add and remove row capabilities",
+              "ariaLabel": "Subnet configuration table",
               "constraints": {
                 "width": "Full",
                 "rows": {
@@ -100,7 +129,7 @@
                         "validations": [
                           {
                             "regex": "^[a-zA-Z0-9-_.]{1,80}$",
-                            "message": "Subnet name must be between 1 and 80 alphanumeric characters, hyphens, or underscores."
+                            "message": "Subnet name must be between 1 and 80 characters."
                           }
                         ]
                       }
@@ -118,38 +147,252 @@
                         "validations": [
                           {
                             "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
-                            "message": "Must be a valid IPv4 CIDR prefix (e.g. 10.0.1.0/24)."
+                            "message": "Must be a valid IPv4 CIDR prefix."
                           }
                         ]
                       }
                     }
                   }
                 ]
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
+            },
+            {
+              "name": "existingVnetNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Targeting an existing VNet preserves all existing subnets, route tables, and peerings. If the VNet is located in another resource group within this subscription, specify its Resource Group name."
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
+            },
+            {
+              "name": "existingVnetName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Existing Virtual Network Name",
+              "toolTip": "Name of the target existing Virtual Network in Azure.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
+            },
+            {
+              "name": "existingVnetResourceGroup",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Existing VNet Resource Group (Optional for Cross-RG)",
+              "toolTip": "Leave empty if existing VNet resides in target resource group; specify resource group name for cross-RG deployment.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
+            },
+            {
+              "name": "existingSubnetName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Target Existing Subnet Name",
+              "toolTip": "Name of an existing subnet to bind VM or security controls to.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
+            },
+            {
+              "name": "addNewSubnetToggle",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Deploy an additional subnet into this existing Virtual Network",
+              "toolTip": "Adds a new child subnet to the existing VNet without disrupting existing subnets or peerings.",
+              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
+            },
+            {
+              "name": "newSubnetName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "New Subnet Name",
+              "defaultValue": "snet-workload-new",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
+            },
+            {
+              "name": "newSubnetPrefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "New Subnet CIDR Prefix",
+              "defaultValue": "10.0.3.0/24",
+              "constraints": {
+                "required": false,
+                "validations": [
+                  {
+                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
+                    "message": "Must be a valid IPv4 CIDR prefix."
+                  }
+                ]
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
+            }
+          ]
+        },
+        {
+          "name": "security",
+          "label": "Security",
+          "description": "Configure Network Security Groups (NSG) and secure traffic policies.",
+          "elements": [
+            {
+              "name": "securityIntro",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Network Security Groups enforce strict zero-trust defaults: SSH and RDP are restricted to VirtualNetwork internal address spaces and never exposed directly to the public internet."
               }
+            },
+            {
+              "name": "nsgModeOptions",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "Network Security Group Option",
+              "defaultValue": "new",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Create new NSG with enterprise secure defaults (Internal management only)",
+                    "value": "new"
+                  },
+                  {
+                    "label": "Associate existing NSG (same or cross-resource group)",
+                    "value": "existing"
+                  },
+                  {
+                    "label": "No NSG association (Unmanaged subnet security)",
+                    "value": "none"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "nsgName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "New NSG Name",
+              "defaultValue": "nsg-elrehan-pilot",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('security').nsgModeOptions, 'new')]"
+            },
+            {
+              "name": "existingNsgName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Existing NSG Name",
+              "toolTip": "Name of the existing NSG to associate with the subnets.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('security').nsgModeOptions, 'existing')]"
+            },
+            {
+              "name": "existingNsgResourceGroup",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Existing NSG Resource Group (Optional for Cross-RG)",
+              "toolTip": "Specify resource group name if the existing NSG is located in another resource group within this subscription.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('security').nsgModeOptions, 'existing')]"
+            }
+          ]
+        },
+        {
+          "name": "routing",
+          "label": "Routing",
+          "description": "Configure Route Tables, custom next-hop routes, and BGP propagation.",
+          "elements": [
+            {
+              "name": "routingIntro",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Route tables govern packet forwarding for workloads. BGP propagation control allows fine-grained control when peering with ExpressRoute or VPN Gateways."
+              }
+            },
+            {
+              "name": "routeTableModeOptions",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "Route Table Option",
+              "defaultValue": "new",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Create new Route Table",
+                    "value": "new"
+                  },
+                  {
+                    "label": "Associate existing Route Table (same or cross-resource group)",
+                    "value": "existing"
+                  },
+                  {
+                    "label": "No Route Table association (Default system routing)",
+                    "value": "none"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "routeTableName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "New Route Table Name",
+              "defaultValue": "rt-elrehan-pilot",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('routing').routeTableModeOptions, 'new')]"
+            },
+            {
+              "name": "disableBgpRoutePropagation",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Disable BGP route propagation",
+              "toolTip": "Check this box to prevent on-premises routes learned via BGP from propagating to this route table.",
+              "visible": "[equals(steps('routing').routeTableModeOptions, 'new')]"
+            },
+            {
+              "name": "existingRouteTableName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Existing Route Table Name",
+              "toolTip": "Name of the existing Route Table to associate with the subnets.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('routing').routeTableModeOptions, 'existing')]"
+            },
+            {
+              "name": "existingRouteTableResourceGroup",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Existing Route Table Resource Group (Optional for Cross-RG)",
+              "toolTip": "Specify resource group name if the existing Route Table is located in another resource group.",
+              "constraints": {
+                "required": false
+              },
+              "visible": "[equals(steps('routing').routeTableModeOptions, 'existing')]"
             }
           ]
         },
         {
           "name": "compute",
           "label": "Virtual Machines",
-          "description": "Configure compute parameters, region-aware VM SKUs, and pilot safety toggles.",
+          "description": "Optionally provision a Virtual Machine for baseline validation.",
           "elements": [
             {
               "name": "deployVmToggle",
               "type": "Microsoft.Common.CheckBox",
-              "label": "Enable Virtual Machine Resource Deployment (Pilot Mode)",
-              "toolTip": "Leave unchecked (default) to validate inputs without provisioning compute resources."
+              "label": "Enable Virtual Machine Resource Deployment",
+              "toolTip": "Provision a pilot Virtual Machine attached to the selected subnet."
             },
             {
               "name": "osTypeOptions",
-              "type": "Microsoft.Common.OptionsGroup",
+              "type": "Microsoft.Common.DropDown",
               "label": "Operating System",
               "defaultValue": "Linux",
-              "toolTip": "Select the operating system platform.",
+              "toolTip": "Select Linux (Ubuntu 22.04 LTS) or Windows Server 2022 Datacenter.",
               "constraints": {
                 "allowedValues": [
                   {
-                    "label": "Linux (Ubuntu Server 22.04 LTS)",
+                    "label": "Linux (Ubuntu 22.04 LTS)",
                     "value": "Linux"
                   },
                   {
@@ -157,99 +400,114 @@
                     "value": "Windows"
                   }
                 ]
-              }
+              },
+              "visible": "[steps('compute').deployVmToggle]"
             },
             {
               "name": "vmName",
               "type": "Microsoft.Common.TextBox",
               "label": "Virtual Machine Name",
-              "defaultValue": "vm-elrehan-pilot-01",
-              "toolTip": "Specify a name for the virtual machine.",
+              "defaultValue": "vm-elrehan-pilot",
+              "toolTip": "1-64 characters alphanumeric or hyphens.",
               "constraints": {
-                "required": true,
+                "required": false,
                 "validations": [
                   {
-                    "regex": "^[a-zA-Z0-9-]{1,64}$",
-                    "message": "VM name must be 1 to 64 alphanumeric characters or hyphens."
+                    "regex": "^[a-zA-Z0-9-_.]{1,64}$",
+                    "message": "VM name must be 1 to 64 alphanumeric characters, hyphens, or underscores."
                   }
                 ]
-              }
+              },
+              "visible": "[steps('compute').deployVmToggle]"
             },
             {
               "name": "vmSizeLinux",
-              "type": "Microsoft.Compute.SizeSelector",
-              "label": "Virtual Machine Size (Linux)",
-              "toolTip": "Select a compute size for the Linux virtual machine.",
-              "recommendedSizes": [
-                "Standard_D2s_v5",
-                "Standard_B2s",
-                "Standard_D4s_v5"
-              ],
-              "osPlatform": "Linux",
-              "scope": {
-                "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
-                "location": "[steps('basics').resourceScope.location.name]"
+              "type": "Microsoft.Common.DropDown",
+              "label": "Virtual Machine Size (Linux Recommended)",
+              "defaultValue": "Standard_B2s",
+              "toolTip": "Select an enterprise VM size recommended for pilot workloads.",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Standard_B2s (2 vCPUs, 4 GiB memory)",
+                    "value": "Standard_B2s"
+                  },
+                  {
+                    "label": "Standard_B2ms (2 vCPUs, 8 GiB memory)",
+                    "value": "Standard_B2ms"
+                  },
+                  {
+                    "label": "Standard_D2s_v5 (2 vCPUs, 8 GiB memory - General Purpose)",
+                    "value": "Standard_D2s_v5"
+                  },
+                  {
+                    "label": "Standard_D4s_v5 (4 vCPUs, 16 GiB memory - General Purpose)",
+                    "value": "Standard_D4s_v5"
+                  }
+                ]
               },
-              "visible": "[equals(steps('compute').osTypeOptions, 'Linux')]"
+              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux'))]"
             },
             {
               "name": "vmSizeWindows",
-              "type": "Microsoft.Compute.SizeSelector",
-              "label": "Virtual Machine Size (Windows)",
-              "toolTip": "Select a compute size for the Windows virtual machine.",
-              "recommendedSizes": [
-                "Standard_D2s_v5",
-                "Standard_D4s_v5",
-                "Standard_B2ms"
-              ],
-              "osPlatform": "Windows",
-              "scope": {
-                "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
-                "location": "[steps('basics').resourceScope.location.name]"
+              "type": "Microsoft.Common.DropDown",
+              "label": "Virtual Machine Size (Windows Recommended)",
+              "defaultValue": "Standard_D2s_v5",
+              "toolTip": "Select a VM size with at least 8 GiB RAM for Windows Server performance.",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Standard_D2s_v5 (2 vCPUs, 8 GiB memory - Recommended Windows Minimum)",
+                    "value": "Standard_D2s_v5"
+                  },
+                  {
+                    "label": "Standard_D4s_v5 (4 vCPUs, 16 GiB memory - General Purpose)",
+                    "value": "Standard_D4s_v5"
+                  },
+                  {
+                    "label": "Standard_B2ms (2 vCPUs, 8 GiB memory - Burstable)",
+                    "value": "Standard_B2ms"
+                  }
+                ]
               },
-              "visible": "[equals(steps('compute').osTypeOptions, 'Windows')]"
+              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Windows'))]"
             },
             {
               "name": "selectedSubnetName",
               "type": "Microsoft.Common.TextBox",
-              "label": "Target Subnet Name",
+              "label": "Target Subnet Name for VM NIC",
               "defaultValue": "snet-workload",
-              "toolTip": "Name of the configured subnet where the VM network interface will be placed. Must match a configured subnet name.",
+              "toolTip": "Specify which subnet name the VM NIC will attach to.",
               "constraints": {
-                "required": true
-              }
+                "required": false
+              },
+              "visible": "[steps('compute').deployVmToggle]"
             },
             {
               "name": "adminUsername",
               "type": "Microsoft.Common.TextBox",
               "label": "Administrator Username",
               "defaultValue": "azureuser",
-              "toolTip": "Username for the administrative account.",
               "constraints": {
-                "required": true,
+                "required": false,
                 "validations": [
                   {
                     "regex": "^[a-zA-Z0-9-_.]{1,64}$",
                     "message": "Username must be 1 to 64 alphanumeric characters, hyphens, or underscores."
                   }
                 ]
-              }
+              },
+              "visible": "[steps('compute').deployVmToggle]"
             },
             {
               "name": "adminSshPublicKey",
               "type": "Microsoft.Common.TextBox",
               "label": "SSH Public Key (Linux)",
-              "toolTip": "Provide an OpenSSH public key (starts with ssh-rsa or ssh-ed25519). Azure does not support ECDSA for VM provisioning.",
-              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux'))]",
+              "toolTip": "OpenSSH public key (ssh-rsa or ssh-ed25519). ECDSA keys are rejected.",
               "constraints": {
-                "required": false,
-                "validations": [
-                  {
-                    "regex": "^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256)\\s+[A-Za-z0-9+/=]+.*$",
-                    "message": "Must be a valid OpenSSH public key format."
-                  }
-                ]
-              }
+                "required": false
+              },
+              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux'))]"
             },
             {
               "name": "adminPassword",
@@ -258,12 +516,34 @@
                 "password": "Administrator Password (Windows)",
                 "confirmPassword": "Confirm Password"
               },
-              "toolTip": "Password must be at least 12 characters and contain uppercase, lowercase, numbers, and special characters.",
-              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Windows'))]",
+              "toolTip": "Password between 12 and 123 characters with uppercase, lowercase, numbers, and special characters.",
               "constraints": {
                 "required": false,
                 "regex": "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()-_=+]).{12,123}$",
                 "validationMessage": "Password must be 12 to 123 characters and satisfy complexity requirements."
+              },
+              "visible": "[and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Windows'))]"
+            }
+          ]
+        },
+        {
+          "name": "review",
+          "label": "Review",
+          "description": "Inspect deployment parameters, architecture summary, and cost warnings prior to submission.",
+          "elements": [
+            {
+              "name": "reviewSummary",
+              "type": "Microsoft.Common.TextBlock",
+              "options": {
+                "text": "### Architecture & Deployment Summary\n\n- **Target Scope:** Resource Group deployment via native Form View.\n- **Networking:** Multi-tier Virtual Network (or targeted existing VNet with cross-RG support).\n- **Security:** Network Security Group with enterprise-grade internal-only management access.\n- **Routing:** Route Table with custom user-defined route capability.\n- **Compute:** Optional Virtual Machine (Pilot safety mode defaults to disabled).\n\nProceed to the next tab to execute the native Azure Resource Manager client validation."
+              }
+            },
+            {
+              "name": "securityNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Zero Credential Exposure: Passwords and SSH private keys are never stored in template definitions or visible in portal reviews. Passwords remain masked at all times."
               }
             }
           ]
@@ -277,9 +557,25 @@
       "parameters": {
         "location": "[steps('basics').resourceScope.location.name]",
         "tags": "[steps('basics').tags]",
+        "vnetMode": "[steps('networking').vnetModeOptions]",
         "vnetName": "[steps('networking').vnetName]",
         "addressPrefix": "[steps('networking').addressPrefix]",
         "subnets": "[steps('networking').subnetsGrid]",
+        "existingVnetName": "[steps('networking').existingVnetName]",
+        "existingVnetResourceGroup": "[steps('networking').existingVnetResourceGroup]",
+        "existingSubnetName": "[steps('networking').existingSubnetName]",
+        "addNewSubnet": "[steps('networking').addNewSubnetToggle]",
+        "newSubnetName": "[steps('networking').newSubnetName]",
+        "newSubnetPrefix": "[steps('networking').newSubnetPrefix]",
+        "nsgMode": "[steps('security').nsgModeOptions]",
+        "nsgName": "[steps('security').nsgName]",
+        "existingNsgName": "[steps('security').existingNsgName]",
+        "existingNsgResourceGroup": "[steps('security').existingNsgResourceGroup]",
+        "routeTableMode": "[steps('routing').routeTableModeOptions]",
+        "routeTableName": "[steps('routing').routeTableName]",
+        "disableBgpRoutePropagation": "[steps('routing').disableBgpRoutePropagation]",
+        "existingRouteTableName": "[steps('routing').existingRouteTableName]",
+        "existingRouteTableResourceGroup": "[steps('routing').existingRouteTableResourceGroup]",
         "deployVm": "[steps('compute').deployVmToggle]",
         "osType": "[steps('compute').osTypeOptions]",
         "vmName": "[steps('compute').vmName]",

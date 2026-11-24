@@ -246,7 +246,23 @@
       "selectedSubnetName": "[steps('compute').selectedSubnetName]",
       "adminUsername": "[steps('compute').adminUsername]",
       "adminPassword": "[if(and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Windows')), steps('compute').adminPassword, '')]",
-      "adminSshPublicKey": "[if(and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux')), steps('compute').adminSshPublicKey, '')]"
+      "adminSshPublicKey": "[if(and(steps('compute').deployVmToggle, equals(steps('compute').osTypeOptions, 'Linux')), steps('compute').adminSshPublicKey, '')]",
+      "vnetMode": "[vnetMode]",
+      "existingVnetName": "",
+      "existingVnetResourceGroup": "",
+      "existingSubnetName": "",
+      "addNewSubnet": "[addNewSubnet]",
+      "newSubnetName": "",
+      "newSubnetPrefix": "",
+      "nsgMode": "",
+      "nsgName": "[nsgName]",
+      "existingNsgName": "",
+      "existingNsgResourceGroup": "",
+      "routeTableMode": "",
+      "routeTableName": "[routeTableName]",
+      "disableBgpRoutePropagation": "",
+      "existingRouteTableName": "",
+      "existingRouteTableResourceGroup": ""
     }
   }
 }

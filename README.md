@@ -26,15 +26,17 @@ https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlad
 ## Key Features
 
 * **100% Azure-Native UX:** Built on official Microsoft Azure Portal Form View technology (`uiFormDefinition.json`) and Azure Resource Manager / Bicep.
-* **Multi-Step Wizard Experience:**
-  * **Tab 1 — Basics:** Subscription picker, native Resource Group selector (New vs. Existing), region selector (filtered by resource provider), and tags. Contradictory manual provisioning toggles are eliminated; `Microsoft.Common.ResourceScope` natively governs the lifecycle.
-  * **Tab 2 — Networking:** VNet name, top-level IPv4 CIDR, and dynamic multi-subnet configuration using `Microsoft.Common.EditableGrid` with dynamic add/remove rows and CIDR regex validation.
-  * **Tab 3 — Virtual Machines:** OS platform selection (Linux/Windows), VM name, region-aware dual `Microsoft.Compute.SizeSelector` controls reflecting OS-specific licensing costs, target subnet binding, pilot safety toggle, and conditional credential boxes.
-  * **Tab 4 — Review + Create:** Native Azure Portal review synthesis, client-side parameter validation, live pricing estimates, and deployment dispatch.
+* **Six-Step Enterprise Wizard Experience:**
+  * **Step 1 — Basics:** Subscription picker, native Resource Group selector (New vs. Existing), region selector (filtered by resource provider), resource tagging, and clear cost awareness guidance.
+  * **Step 2 — Networking:** Multi-mode deployment supporting new VNet creation with dynamic subnets via `Microsoft.Common.EditableGrid`, or deployment into existing VNets across resource groups, referencing existing subnets or adding child subnets cleanly via `modules/subnet.bicep`.
+  * **Step 3 — Security:** Network Security Group options (create new with internal-only management access, associate existing NSG cross-RG, or no association).
+  * **Step 4 — Routing:** Reusable Route Table module (`modules/routeTable.bicep`) supporting new Route Tables with custom user-defined routes, BGP propagation control, existing Route Table associations, or default system routing.
+  * **Step 5 — Virtual Machines:** Optional pilot VM deployment, dual Linux/Windows size selection, dynamic subnet binding, private NIC attachment, and strict credential validation (`ssh-rsa`/`ssh-ed25519` for Linux; 12-123 char complex passwords for Windows).
+  * **Step 6 — Review:** Architecture deployment summary, zero credential exposure confirmation, followed by Azure's native `Review + create` client-side validation.
 * **Explicit Pre-Flight Deployment Validation:**
-  * **Elimination of Silent Suppression:** Silent suppression (`shouldDeployVm = deployVm && hasValidAuth`) has been completely replaced with explicit `fail()` validation guards. If `deployVm` is true and credentials are invalid or missing, deployment explicitly fails with a descriptive error.
-  * **Elimination of Silent Subnet Fallback:** Silent fallback to the first subnet (`subnets[0].name`) has been removed. If `deployVm` is true and the requested subnet does not exist in the configured subnets array, deployment explicitly fails.
-  * **SSH Public Key Hardening:** In compliance with Azure Linux VM agent capabilities, authentication strictly permits OpenSSH RSA (`ssh-rsa`, min 2048-bit) and ED25519 (`ssh-ed25519`) keys. Incompatible ECDSA keys are rejected at validation time.
+  * **Elimination of Silent Suppression:** Silent suppression has been completely replaced with explicit `fail()` validation guards. If `deployVm` is true and credentials are invalid or missing, deployment explicitly fails with a descriptive error.
+  * **Elimination of Silent Subnet Fallback:** Silent fallback to the first subnet has been removed. If `deployVm` is true and the requested subnet does not match configured or existing subnets, deployment explicitly fails.
+  * **SSH Public Key Hardening:** Strictly permits OpenSSH RSA (`ssh-rsa`, min 2048-bit) and ED25519 (`ssh-ed25519`) keys. Incompatible ECDSA keys are rejected at validation time.
   * **Windows Password Complexity:** Strict length (12-123 characters) and complexity validation.
   * **Zero Hardcoded Credentials:** Zero mock keys, zero placeholder passwords; all credentials default to empty strings.
 * **Resource Tag Normalization (`TagsByResource`):**
@@ -42,9 +44,9 @@ https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlad
 * **Deterministic Network Validation Suite:**
   * Embedded Python network math engine (`scripts/network_validator.py`) validating CIDR containment, subnet overlaps, canonical prefixes, /8 to /29 Azure prefix bounds, and reserved subnet constraints across 8 mandatory test cases.
   * Duplicate subnet name pre-flight validation in `modules/network.bicep`.
-* **Modular Bicep Architecture:** Clean separation of concerns with `main.bicep` (subscription-scope orchestrator), `main-rg.bicep` (resource-group scope orchestrator), `modules/network.bicep`, `modules/compute.bicep`, and `modules/nsg.bicep`.
+* **Modular Bicep Architecture:** Clean separation of concerns with `main.bicep` (subscription-scope orchestrator), `main-rg.bicep` (resource-group scope orchestrator), `modules/network.bicep`, `modules/compute.bicep`, `modules/nsg.bicep`, `modules/routeTable.bicep`, and `modules/subnet.bicep`.
 * **Zero Workstation Side-Effects:** No automatic Azure login, subscription alterations, or unsolicited cloud deployments.
-* **30-Point Automated QA Test Harness:** Automated test suite verifying Bicep compilation, ARM JSON scope schemas, official UI schema compliance, parameter alignment, security scans, network math, portal artifacts integrity, and 9 ARM evaluation simulation scenarios (**30/30 checks passed**).
+* **38-Point Automated QA Test Harness:** Automated test suite verifying Bicep compilation, ARM JSON scope schemas, official UI schema compliance, parameter alignment, security scans, network math, portal artifacts integrity, and 15 ARM evaluation simulation scenarios (**38/38 checks passed**).
 
 ---
 

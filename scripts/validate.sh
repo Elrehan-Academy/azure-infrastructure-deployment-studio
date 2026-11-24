@@ -65,7 +65,9 @@ bicep_files = [
     "main-rg.bicep",
     "modules/network.bicep",
     "modules/compute.bicep",
-    "modules/nsg.bicep"
+    "modules/nsg.bicep",
+    "modules/routeTable.bicep",
+    "modules/subnet.bicep"
 ]
 
 for bf in bicep_files:
@@ -263,87 +265,282 @@ record(
     "PASS" if (has_tag_norm_main and has_tag_norm_rg) else "FAIL"
 )
 
-print("\n--- 9. Deterministic ARM Evaluation Simulation Suite ---")
-# Evaluate ARM template variable expressions under positive and negative configurations
-def simulate_bicep_eval(deploy_vm, os_type, ssh_key, password, selected_subnet, subnets):
-    is_linux = (os_type == 'Linux')
-    is_windows = (os_type == 'Windows')
-    has_valid_linux_auth = is_linux and bool(ssh_key) and (ssh_key.startswith('ssh-rsa') or ssh_key.startswith('ssh-ed25519'))
-    has_valid_windows_auth = is_windows and bool(password) and (12 <= len(password) <= 123)
-    has_valid_auth = has_valid_linux_auth or has_valid_windows_auth
-
-    configured_subnets = [s['name'] for s in subnets]
-    is_subnet_valid = bool(selected_subnet) and (selected_subnet in configured_subnets)
-
-    subnet_names = [s['name'].lower() for s in subnets]
-    has_dup_subnets = len(set(subnet_names)) != len(subnet_names)
-
+print("\n--- 9. Deterministic ARM Evaluation Simulation Suite (15 Scenarios) ---")
+# Evaluate ARM template variable expressions under positive and negative configurations across all 15 scenarios
+def simulate_bicep_eval(params):
+    vnet_mode = params.get("vnetMode", "new")
+    address_prefix = params.get("addressPrefix", "10.0.0.0/16")
+    subnets = params.get("subnets", [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}])
+    existing_vnet_name = params.get("existingVnetName", "")
+    add_new_subnet = params.get("addNewSubnet", False)
+    new_subnet_name = params.get("newSubnetName", "")
+    new_subnet_prefix = params.get("newSubnetPrefix", "")
+    existing_subnet_name = params.get("existingSubnetName", "")
+    
+    nsg_mode = params.get("nsgMode", "new")
+    existing_nsg_name = params.get("existingNsgName", "")
+    
+    rt_mode = params.get("routeTableMode", "new")
+    existing_rt_name = params.get("existingRouteTableName", "")
+    
+    deploy_vm = params.get("deployVm", False)
+    os_type = params.get("osType", "Linux")
+    ssh_key = params.get("adminSshPublicKey", "")
+    password = params.get("adminPassword", "")
+    selected_subnet = params.get("selectedSubnetName", "snet-workload")
+    
     errors = []
-    if has_dup_subnets:
-        errors.append("Duplicate subnet names detected")
+    
+    # Network validation
+    if vnet_mode == "new":
+        is_valid_net, net_errs = validate_network_configuration(address_prefix, subnets)
+        if not is_valid_net:
+            errors.extend(net_errs)
+    elif vnet_mode == "existing":
+        if not existing_vnet_name:
+            errors.append("existingVnetName is required when vnetMode is existing")
+        if add_new_subnet:
+            if not new_subnet_name or not new_subnet_prefix:
+                errors.append("newSubnetName and newSubnetPrefix required when addNewSubnet is true")
+            else:
+                try:
+                    import ipaddress
+                    ipaddress.IPv4Network(new_subnet_prefix, strict=True)
+                except Exception as e:
+                    errors.append(f"Invalid newSubnetPrefix: {e}")
+                    
+    # NSG validation
+    if nsg_mode == "existing" and not existing_nsg_name:
+        errors.append("existingNsgName is required when nsgMode is existing")
+        
+    # Route Table validation
+    if rt_mode == "existing" and not existing_rt_name:
+        errors.append("existingRouteTableName is required when routeTableMode is existing")
+        
+    # Compute validation
     if deploy_vm:
+        is_linux = (os_type == 'Linux')
+        is_windows = (os_type == 'Windows')
+        has_valid_linux_auth = is_linux and bool(ssh_key) and (ssh_key.startswith('ssh-rsa') or ssh_key.startswith('ssh-ed25519'))
+        has_valid_windows_auth = is_windows and bool(password) and (12 <= len(password) <= 123)
+        has_valid_auth = has_valid_linux_auth or has_valid_windows_auth
         if not has_valid_auth:
-            errors.append("VM deployment is enabled, but valid authentication credentials were not provided")
+            errors.append("VM deployment enabled but credentials invalid or missing")
+            
+        configured_subnets = [s['name'] for s in subnets] if vnet_mode == 'new' else []
+        is_subnet_valid = False
+        if vnet_mode == 'new':
+            is_subnet_valid = bool(selected_subnet) and (selected_subnet in configured_subnets)
+        else:
+            is_subnet_valid = bool(selected_subnet) and ((add_new_subnet and selected_subnet == new_subnet_name) or (bool(existing_subnet_name) and selected_subnet == existing_subnet_name))
+            
         if not is_subnet_valid:
-            errors.append(f"VM deployment is enabled, but the selected subnet '{selected_subnet}' does not match any configured subnet")
-
+            errors.append(f"VM deployment enabled but selected subnet '{selected_subnet}' is not valid")
+            
     return {
-        "deploy_vm": deploy_vm,
         "valid": len(errors) == 0,
         "errors": errors
     }
 
 eval_cases = [
     {
-        "desc": "Baseline (deployVm=false, network only)",
-        "inputs": (False, "Linux", "", "", "snet-workload", [{"name": "snet-workload"}, {"name": "snet-mgmt"}]),
+        "id": "TC-SCENARIO-01",
+        "desc": "1. New resource group, new VNet, new NSG, new Route Table, VM enabled",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-elrehan-new",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "new", "nsgName": "nsg-pilot",
+            "routeTableMode": "new", "routeTableName": "rt-pilot",
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...",
+            "selectedSubnetName": "snet-workload"
+        },
         "expect_valid": True
     },
     {
-        "desc": "Negative: deployVm=true with missing SSH key",
-        "inputs": (True, "Linux", "", "", "snet-workload", [{"name": "snet-workload"}, {"name": "snet-mgmt"}]),
-        "expect_valid": False
-    },
-    {
-        "desc": "Negative: deployVm=true with unsupported ECDSA SSH key",
-        "inputs": (True, "Linux", "ecdsa-sha2-nistp256 AAAAE2VjZHNh...", "", "snet-workload", [{"name": "snet-workload"}]),
-        "expect_valid": False
-    },
-    {
-        "desc": "Negative: deployVm=true with short Windows password (8 chars)",
-        "inputs": (True, "Windows", "", "Short1!", "snet-workload", [{"name": "snet-workload"}]),
-        "expect_valid": False
-    },
-    {
-        "desc": "Negative: deployVm=true with nonexistent subnet selection",
-        "inputs": (True, "Linux", "ssh-rsa AAAAB3NzaC1yc2E...", "", "snet-invalid", [{"name": "snet-workload"}]),
-        "expect_valid": False
-    },
-    {
-        "desc": "Negative: duplicate subnet names in subnets configuration",
-        "inputs": (False, "Linux", "", "", "snet-workload", [{"name": "snet-dup"}, {"name": "snet-dup"}]),
-        "expect_valid": False
-    },
-    {
-        "desc": "Positive: deployVm=true with valid RSA key and valid subnet",
-        "inputs": (True, "Linux", "ssh-rsa AAAAB3NzaC1yc2E...", "", "snet-workload", [{"name": "snet-workload"}]),
+        "id": "TC-SCENARIO-02",
+        "desc": "2. New resource group, new VNet, existing NSG, existing Route Table, VM enabled",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-elrehan-new",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "existing", "existingNsgName": "nsg-corp-shared",
+            "routeTableMode": "existing", "existingRouteTableName": "rt-corp-shared",
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...",
+            "selectedSubnetName": "snet-workload"
+        },
         "expect_valid": True
     },
     {
-        "desc": "Positive: deployVm=true with valid ED25519 key and valid subnet",
-        "inputs": (True, "Linux", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5...", "", "snet-workload", [{"name": "snet-workload"}]),
+        "id": "TC-SCENARIO-03",
+        "desc": "3. Existing resource group, new VNet, new NSG, new Route Table, VM disabled",
+        "params": {
+            "createNewResourceGroup": False, "resourceGroupName": "rg-existing",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "new", "nsgName": "nsg-pilot",
+            "routeTableMode": "new", "routeTableName": "rt-pilot",
+            "deployVm": False
+        },
         "expect_valid": True
     },
     {
-        "desc": "Positive: deployVm=true with valid 16-char Windows password and valid subnet",
-        "inputs": (True, "Windows", "", "P@ssw0rdSecure2026!", "snet-workload", [{"name": "snet-workload"}]),
+        "id": "TC-SCENARIO-04",
+        "desc": "4. Existing resource group, existing VNet, existing NSG, existing Route Table, VM disabled",
+        "params": {
+            "createNewResourceGroup": False, "resourceGroupName": "rg-existing",
+            "vnetMode": "existing", "existingVnetName": "vnet-existing",
+            "existingSubnetName": "snet-existing",
+            "nsgMode": "existing", "existingNsgName": "nsg-existing",
+            "routeTableMode": "existing", "existingRouteTableName": "rt-existing",
+            "deployVm": False
+        },
         "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-05",
+        "desc": "5. Existing resource group, existing VNet, new subnet, new NSG, new Route Table, VM enabled",
+        "params": {
+            "createNewResourceGroup": False, "resourceGroupName": "rg-existing",
+            "vnetMode": "existing", "existingVnetName": "vnet-existing",
+            "addNewSubnet": True, "newSubnetName": "snet-workload-new", "newSubnetPrefix": "10.0.3.0/24",
+            "nsgMode": "new", "nsgName": "nsg-pilot",
+            "routeTableMode": "new", "routeTableName": "rt-pilot",
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...",
+            "selectedSubnetName": "snet-workload-new"
+        },
+        "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-06",
+        "desc": "6. Cross-resource-group VNet deployment (VNet in RG-A, deployment in RG-B)",
+        "params": {
+            "createNewResourceGroup": False, "resourceGroupName": "rg-workload-b",
+            "vnetMode": "existing", "existingVnetName": "vnet-shared-a", "existingVnetResourceGroup": "rg-network-a",
+            "addNewSubnet": True, "newSubnetName": "snet-tier-b", "newSubnetPrefix": "10.10.2.0/24",
+            "nsgMode": "none", "routeTableMode": "none",
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "ssh-rsa AAAAB3NzaC1yc2E...",
+            "selectedSubnetName": "snet-tier-b"
+        },
+        "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-07",
+        "desc": "7. Cross-resource-group NSG reference (NSG in RG-A, deployment in RG-B)",
+        "params": {
+            "createNewResourceGroup": False, "resourceGroupName": "rg-workload-b",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "existing", "existingNsgName": "nsg-central-sec", "existingNsgResourceGroup": "rg-security-a",
+            "routeTableMode": "none",
+            "deployVm": False
+        },
+        "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-08",
+        "desc": "8. Cross-resource-group Route Table reference (Route Table in RG-A, deployment in RG-B)",
+        "params": {
+            "createNewResourceGroup": False, "resourceGroupName": "rg-workload-b",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "none",
+            "routeTableMode": "existing", "existingRouteTableName": "rt-hub-fw", "existingRouteTableResourceGroup": "rg-routing-a",
+            "deployVm": False
+        },
+        "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-09",
+        "desc": "9. Windows VM deployment with password authentication",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-win-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "new", "routeTableMode": "new",
+            "deployVm": True, "osType": "Windows", "adminPassword": "P@ssw0rdSecure2026!",
+            "selectedSubnetName": "snet-workload"
+        },
+        "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-10",
+        "desc": "10. Linux VM deployment with SSH key authentication",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-linux-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "nsgMode": "new", "routeTableMode": "new",
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...",
+            "selectedSubnetName": "snet-workload"
+        },
+        "expect_valid": True
+    },
+    {
+        "id": "TC-SCENARIO-11",
+        "desc": "11. Invalid VNet CIDR rejected",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.256.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.256.1.0/24"}],
+            "deployVm": False
+        },
+        "expect_valid": False
+    },
+    {
+        "id": "TC-SCENARIO-12",
+        "desc": "12. Overlapping subnets rejected",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [
+                {"name": "snet-1", "addressPrefix": "10.0.1.0/24"},
+                {"name": "snet-2", "addressPrefix": "10.0.1.128/25"}
+            ],
+            "deployVm": False
+        },
+        "expect_valid": False
+    },
+    {
+        "id": "TC-SCENARIO-13",
+        "desc": "13. Subnet outside VNet CIDR rejected",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-outside", "addressPrefix": "10.1.1.0/24"}],
+            "deployVm": False
+        },
+        "expect_valid": False
+    },
+    {
+        "id": "TC-SCENARIO-14",
+        "desc": "14. Missing required authentication rejected when VM enabled",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "",
+            "selectedSubnetName": "snet-workload"
+        },
+        "expect_valid": False
+    },
+    {
+        "id": "TC-SCENARIO-15",
+        "desc": "15. Nonexistent subnet selection rejected when VM enabled",
+        "params": {
+            "createNewResourceGroup": True, "resourceGroupName": "rg-pilot",
+            "vnetMode": "new", "vnetName": "vnet-pilot", "addressPrefix": "10.0.0.0/16",
+            "subnets": [{"name": "snet-workload", "addressPrefix": "10.0.1.0/24"}],
+            "deployVm": True, "osType": "Linux", "adminSshPublicKey": "ssh-rsa AAAAB3NzaC1yc2E...",
+            "selectedSubnetName": "snet-nonexistent"
+        },
+        "expect_valid": False
     }
 ]
 
 eval_suite_passed = True
 for tc in eval_cases:
-    res = simulate_bicep_eval(*tc["inputs"])
+    res = simulate_bicep_eval(tc["params"])
     passed = (res["valid"] == tc["expect_valid"])
     if not passed:
         eval_suite_passed = False

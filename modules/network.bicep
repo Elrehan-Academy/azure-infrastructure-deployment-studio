@@ -30,6 +30,9 @@ param tags object = {}
 @description('Optional default Network Security Group ID to attach to subnets.')
 param networkSecurityGroupId string = ''
 
+@description('Optional default Route Table ID to attach to subnets.')
+param routeTableId string = ''
+
 // Duplicate subnet name validation
 var subnetNames = [for s in subnets: toLower(s.name)]
 var hasDuplicateSubnetNames = length(union(subnetNames, [])) != length(subnetNames)
@@ -52,6 +55,9 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
           addressPrefix: subnet.addressPrefix
           networkSecurityGroup: !empty(networkSecurityGroupId) ? {
             id: networkSecurityGroupId
+          } : null
+          routeTable: !empty(routeTableId) ? {
+            id: routeTableId
           } : null
         }
       }
