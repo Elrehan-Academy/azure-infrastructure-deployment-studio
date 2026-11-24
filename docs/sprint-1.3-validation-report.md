@@ -107,3 +107,16 @@ All automated tests in `scripts/validate.sh` were executed on the active `sprint
 - [x] **Zero Cloud Deployments:** No Azure subscriptions touched; no resources provisioned.
 - [x] **Commit-Pinned Portal URL:** Portal test link pinned to the exact commit SHA on `sprint-1.3`.
 - [x] **Checkpoint Enforced:** Execution stopped at the live Azure Portal testing checkpoint.
+
+---
+
+## 5. Live Azure Portal Testing Checkpoint
+
+As mandated by project constraints, the implementation is stopped at the **Live Azure Portal Testing Checkpoint**.
+
+The project owner can execute the manual portal acceptance suite using the commit-pinned portal test URL:
+```
+https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FElrehan-Academy%2Fazure-infrastructure-deployment-studio%2Fee8ba1bb3544add1d4dcf7a886f3c72159593e4c%2Fportal%2FmainTemplate.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FElrehan-Academy%2Fazure-infrastructure-deployment-studio%2Fee8ba1bb3544add1d4dcf7a886f3c72159593e4c%2Fportal%2FuiFormDefinition.json
+```
+
+Refer to [`docs/portal-test-checklist.md`](file:///home/jana/Projects/azure-infrastructure-deployment-studio/docs/portal-test-checklist.md) for the complete acceptance testing procedure.
