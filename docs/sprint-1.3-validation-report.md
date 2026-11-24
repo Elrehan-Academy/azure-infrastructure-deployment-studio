@@ -116,7 +116,7 @@ As mandated by project constraints, the implementation is stopped at the **Live 
 
 The project owner can execute the manual portal acceptance suite using the commit-pinned portal test URL:
 ```
-https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FElrehan-Academy%2Fazure-infrastructure-deployment-studio%2Fee8ba1bb3544add1d4dcf7a886f3c72159593e4c%2Fportal%2FmainTemplate.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FElrehan-Academy%2Fazure-infrastructure-deployment-studio%2Fee8ba1bb3544add1d4dcf7a886f3c72159593e4c%2Fportal%2FuiFormDefinition.json
+https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FElrehan-Academy%2Fazure-infrastructure-deployment-studio%2F214fccdbbb3bf5a77c3b361e1a8d16ab4d32f640%2Fportal%2FmainTemplate.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FElrehan-Academy%2Fazure-infrastructure-deployment-studio%2F214fccdbbb3bf5a77c3b361e1a8d16ab4d32f640%2Fportal%2FuiFormDefinition.json
 ```
 
 Refer to [`docs/portal-test-checklist.md`](file:///home/jana/Projects/azure-infrastructure-deployment-studio/docs/portal-test-checklist.md) for the complete acceptance testing procedure.
