@@ -178,27 +178,21 @@
               "type": "Microsoft.Common.InfoBox",
               "options": {
                 "style": "Info",
-                "text": "Targeting an existing VNet preserves all existing subnets, route tables, and peerings. If the VNet is located in another resource group within this subscription, specify its Resource Group name."
+                "text": "Targeting an existing VNet preserves all existing subnets, route tables, and peerings. Select any existing Virtual Network within your subscription across resource groups."
               },
               "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
             },
             {
-              "name": "existingVnetName",
-              "type": "Microsoft.Common.TextBox",
-              "label": "Existing Virtual Network Name",
-              "toolTip": "Name of the target existing Virtual Network in Azure.",
+              "name": "existingVnetSelector",
+              "type": "Microsoft.Solutions.ResourceSelector",
+              "label": "Existing Virtual Network",
+              "toolTip": "Select an existing Virtual Network in the chosen subscription across resource groups.",
+              "resourceType": "Microsoft.Network/virtualNetworks",
               "constraints": {
                 "required": false
               },
-              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
-            },
-            {
-              "name": "existingVnetResourceGroup",
-              "type": "Microsoft.Common.TextBox",
-              "label": "Existing VNet Resource Group (Optional for Cross-RG)",
-              "toolTip": "Leave empty if existing VNet resides in target resource group; specify resource group name for cross-RG deployment.",
-              "constraints": {
-                "required": false
+              "scope": {
+                "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]"
               },
               "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
             },
@@ -569,16 +563,16 @@
     "outputs": {
       "kind": "ResourceGroup",
       "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
-      "location": "[steps('basics').location.name]",
+      "location": "[if(equals(steps('networking').vnetModeOptions, 'existing'), coalesce(steps('networking').existingVnetSelector.location, steps('basics').location.name), steps('basics').location.name)]",
       "parameters": {
-        "location": "[steps('basics').location.name]",
+        "location": "[if(equals(steps('networking').vnetModeOptions, 'existing'), coalesce(steps('networking').existingVnetSelector.location, steps('basics').location.name), steps('basics').location.name)]",
         "tags": "[steps('basics').tags]",
         "vnetMode": "[steps('networking').vnetModeOptions]",
         "vnetName": "[steps('networking').vnetName]",
         "addressPrefix": "[steps('networking').addressPrefix]",
         "subnets": "[steps('networking').subnetsGrid]",
-        "existingVnetName": "[steps('networking').existingVnetName]",
-        "existingVnetResourceGroup": "[steps('networking').existingVnetResourceGroup]",
+        "existingVnetName": "[if(equals(steps('networking').vnetModeOptions, 'existing'), coalesce(steps('networking').existingVnetSelector.name, ''), '')]",
+        "existingVnetResourceGroup": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetSelector.id))), first(skip(split(steps('networking').existingVnetSelector.id, '/'), 4)), '')]",
         "existingSubnetName": "[steps('networking').existingSubnetName]",
         "addNewSubnet": "[steps('networking').addNewSubnetToggle]",
         "newSubnetName": "[steps('networking').newSubnetName]",
