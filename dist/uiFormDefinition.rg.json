@@ -23,8 +23,22 @@
                 "allowExisting": true
               },
               "location": {
-                "label": "Deployment Region",
-                "toolTip": "Select the primary Azure region for infrastructure resources."
+                "resourceTypes": [
+                  "Microsoft.Resources/resourceGroups"
+                ]
+              }
+            },
+            {
+              "name": "location",
+              "type": "Microsoft.Common.LocationSelector",
+              "label": "Deployment Region",
+              "toolTip": "Select the primary Azure region for infrastructure resources.",
+              "resourceTypes": [
+                "Microsoft.Network/virtualNetworks",
+                "Microsoft.Compute/virtualMachines"
+              ],
+              "scope": {
+                "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]"
               }
             },
             {
@@ -553,9 +567,9 @@
     "outputs": {
       "kind": "ResourceGroup",
       "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
-      "location": "[steps('basics').resourceScope.location.name]",
+      "location": "[steps('basics').location.name]",
       "parameters": {
-        "location": "[steps('basics').resourceScope.location.name]",
+        "location": "[steps('basics').location.name]",
         "tags": "[steps('basics').tags]",
         "vnetMode": "[steps('networking').vnetModeOptions]",
         "vnetName": "[steps('networking').vnetName]",
