@@ -7,8 +7,8 @@
       "basics": {
         "description": "Configure the core subscription, resource group, and deployment region.",
         "location": {
-          "label": "Deployment Region",
-          "toolTip": "Select the Azure region where resources will be provisioned.",
+          "label": "Infrastructure Deployment Region",
+          "toolTip": "Select the Azure region where the infrastructure resources will be deployed. This can differ from the resource group region.",
           "resourceTypes": [
             "Microsoft.Network/virtualNetworks",
             "Microsoft.Compute/virtualMachines"

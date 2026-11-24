@@ -31,14 +31,15 @@
             {
               "name": "location",
               "type": "Microsoft.Common.LocationSelector",
-              "label": "Deployment Region",
+              "label": "Infrastructure Deployment Region",
               "resourceTypes": [
                 "Microsoft.Network/virtualNetworks",
                 "Microsoft.Compute/virtualMachines"
               ],
               "scope": {
                 "subscriptionId": "[steps('basics').subscription.subscriptionId]"
-              }
+              },
+              "toolTip": "Select the Azure region where the infrastructure resources will be deployed. This can differ from the resource group region."
             },
             {
               "name": "tags",

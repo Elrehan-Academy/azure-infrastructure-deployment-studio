@@ -25,14 +25,16 @@
               "location": {
                 "resourceTypes": [
                   "Microsoft.Resources/resourceGroups"
-                ]
+                ],
+                "label": "Resource Group Region",
+                "toolTip": "Select the Azure region where the resource group's metadata will be stored."
               }
             },
             {
               "name": "location",
               "type": "Microsoft.Common.LocationSelector",
-              "label": "Deployment Region",
-              "toolTip": "Select the primary Azure region for infrastructure resources.",
+              "label": "Infrastructure Deployment Region",
+              "toolTip": "Select the Azure region where the infrastructure resources will be deployed. This can differ from the resource group region.",
               "resourceTypes": [
                 "Microsoft.Network/virtualNetworks",
                 "Microsoft.Compute/virtualMachines"
