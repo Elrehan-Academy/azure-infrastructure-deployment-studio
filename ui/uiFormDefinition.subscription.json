@@ -303,7 +303,7 @@
               "toolTip": "Select an existing Virtual Network in the chosen resource group.",
               "filter": true,
               "constraints": {
-                "allowedValues": "[map(steps('networking').existingVnetsApi.value, (item) => parse(concat('{\"label\":\"', item.name, ' (', item.location, ')\",\"value\":{\"id\":\"', item.id, '\",\"name\":\"', item.name, '\",\"location\":\"', item.location, '\"}}')))]",
+                "allowedValues": "[map(steps('networking').existingVnetsApi.value, (item) => parse(concat('{\"label\":\"', item.name, ' (', item.location, ')\",\"value\":{\"id\":\"', item.id, '\",\"name\":\"', item.name, '\",\"location\":\"', item.location, '\",\"addressSpaces\":\"', replace(replace(replace(string(coalesce(item.properties.addressSpace.addressPrefixes, parse('[]'))), '[', ''), ']', ''), '\"', ''), '\"}}')))]",
                 "required": true
               },
               "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
@@ -347,12 +347,46 @@
               "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
             },
             {
+              "name": "selectedVnetDetailsNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "[concat('Selected Virtual Network: ', coalesce(steps('networking').existingVnetDropDown.name, 'None'), ' (Region: ', coalesce(steps('networking').existingVnetDropDown.location, 'N/A'), ') | Configured Address Space: ', coalesce(steps('networking').existingVnetDropDown.addressSpaces, 'None'))]"
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)), steps('networking').addNewSubnetToggle)]"
+            },
+            {
+              "name": "existingSubnetAllocationsNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "[if(empty(steps('networking').existingSubnetsApi.value), 'Occupied Subnets: None. No subnets are currently allocated in this Virtual Network.', concat('Occupied Subnets: ', replace(replace(replace(string(map(steps('networking').existingSubnetsApi.value, (item) => concat(item.name, ' (', coalesce(item.properties.addressPrefix, first(item.properties.addressPrefixes), 'No CIDR'), ')'))), '[', ''), ']', ''), '\"', '')))]"
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)), steps('networking').addNewSubnetToggle)]"
+            },
+            {
+              "name": "newSubnetGuidanceNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "None",
+                "text": "New Subnet Sizing & Allocation Guidance: Azure reserves 5 IP addresses per subnet. Sizing: /24 = 251 available IPs, /25 = 123, /26 = 59, /27 = 27, /28 = 11, /29 = 3 (smallest supported). Prefixes must be between /8 and /29. The new CIDR must be contained within a configured VNet address space shown above and must not overlap with any occupied subnet ranges."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
+            },
+            {
               "name": "newSubnetName",
               "type": "Microsoft.Common.TextBox",
               "label": "New Subnet Name",
-              "defaultValue": "snet-workload-new",
+              "defaultValue": "snet-additional",
+              "toolTip": "Name of the additional subnet to deploy into this Virtual Network (1-80 alphanumeric characters, hyphens, or underscores).",
               "constraints": {
-                "required": false
+                "required": true,
+                "validations": [
+                  {
+                    "regex": "^[a-zA-Z0-9-_.]{1,80}$",
+                    "message": "Subnet name must be between 1 and 80 alphanumeric characters, hyphens, or underscores."
+                  }
+                ]
               },
               "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
             },
@@ -360,13 +394,14 @@
               "name": "newSubnetPrefix",
               "type": "Microsoft.Common.TextBox",
               "label": "New Subnet CIDR Prefix",
-              "defaultValue": "10.0.3.0/24",
+              "placeholder": "e.g. 10.0.2.0/24 (must be inside VNet address space)",
+              "toolTip": "IPv4 CIDR prefix for the new subnet. Must be fully contained within a configured VNet address space and non-overlapping with existing subnets.",
               "constraints": {
-                "required": false,
+                "required": true,
                 "validations": [
                   {
-                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
-                    "message": "Must be a valid IPv4 CIDR prefix."
+                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([8-9]|1[0-9]|2[0-9]))$",
+                    "message": "Must be a valid IPv4 CIDR prefix between /8 and /29 (/30, /31, and /32 are unsupported by Azure)."
                   }
                 ]
               },
@@ -710,8 +745,8 @@
         "existingVnetResourceGroup": "[if(equals(steps('networking').vnetModeOptions, 'existing'), steps('basics').resourceGroup.value.name, '')]",
         "existingSubnetName": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), not(steps('networking').addNewSubnetToggle)), coalesce(steps('networking').existingSubnetDropDown, ''), '')]",
         "addNewSubnet": "[steps('networking').addNewSubnetToggle]",
-        "newSubnetName": "[steps('networking').newSubnetName]",
-        "newSubnetPrefix": "[steps('networking').newSubnetPrefix]",
+        "newSubnetName": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle), coalesce(steps('networking').newSubnetName, ''), '')]",
+        "newSubnetPrefix": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle), coalesce(steps('networking').newSubnetPrefix, ''), '')]",
         "nsgMode": "[steps('security').nsgModeOptions]",
         "nsgName": "[steps('security').nsgName]",
         "existingNsgName": "[steps('security').existingNsgName]",

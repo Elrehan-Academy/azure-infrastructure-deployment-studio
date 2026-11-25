@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.49.2.45890",
-      "templateHash": "15656856607469267584"
+      "templateHash": "15874042313229489724"
     }
   },
   "definitions": {
@@ -924,7 +924,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.49.2.45890",
-              "templateHash": "58335949522815064"
+              "templateHash": "10102581818264259749"
             }
           },
           "parameters": {
@@ -967,7 +967,7 @@
               "apiVersion": "2024-05-01",
               "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
               "properties": {
-                "addressPrefix": "[parameters('addressPrefix')]",
+                "addressPrefix": "[if(if(contains(map(coalesce(tryGet(reference(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName')), '2024-05-01'), 'subnets'), createArray()), lambda('s', toLower(lambdaVariables('s').name))), toLower(parameters('subnetName'))), fail(format('Duplicate subnet name detected: A subnet named ''{0}'' already exists in Virtual Network ''{1}''. Subnet creation is rejected to prevent mutating existing infrastructure.', parameters('subnetName'), parameters('vnetName'))), true()), parameters('addressPrefix'), parameters('addressPrefix'))]",
                 "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]",
                 "routeTable": "[if(not(empty(parameters('routeTableId'))), createObject('id', parameters('routeTableId')), null())]"
               }

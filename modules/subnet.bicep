@@ -17,11 +17,16 @@ resource existingVnet 'Microsoft.Network/virtualNetworks@2024-05-01' existing = 
   name: vnetName
 }
 
+// Backend safeguard: Reject duplicate subnet names to prevent overwriting existing subnets
+var existingSubnets = existingVnet.properties.?subnets ?? []
+var isDuplicateName = contains(map(existingSubnets, s => toLower(s.name)), toLower(subnetName))
+var duplicateNameCheck = isDuplicateName ? fail('Duplicate subnet name detected: A subnet named \'${subnetName}\' already exists in Virtual Network \'${vnetName}\'. Subnet creation is rejected to prevent mutating existing infrastructure.') : true
+
 resource subnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
   parent: existingVnet
   name: subnetName
   properties: {
-    addressPrefix: addressPrefix
+    addressPrefix: duplicateNameCheck ? addressPrefix : addressPrefix
     networkSecurityGroup: !empty(networkSecurityGroupId) ? {
       id: networkSecurityGroupId
     } : null

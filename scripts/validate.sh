@@ -33,6 +33,7 @@ sys.path.insert(0, scripts_dir)
 try:
     from network_validator import validate_network_configuration, run_test_suite
     from test_three_subnets import run_n3_test_suite
+    from test_additional_subnet import run_n4_test_suite
     has_net_validator = True
 except ImportError as e:
     has_net_validator = False
@@ -260,6 +261,14 @@ if has_net_validator:
         "All 15 test scenarios pass exact expected validation outcomes",
         f"{n3_passed}/15 tests passed" if n3_failed == 0 else f"{n3_failed} failures",
         "PASS" if n3_failed == 0 else "FAIL"
+    )
+
+    n4_passed = run_n4_test_suite()
+    record(
+        "Intelligent Additional Subnet validation engine (18 mandatory test scenarios)",
+        "All 18 test scenarios pass exact expected validation outcomes",
+        "18/18 tests passed" if n4_passed else "Failures in N4 test cases",
+        "PASS" if n4_passed else "FAIL"
     )
 else:
     record("Network calculation engine", "network_validator.py present", net_import_err, "FAIL")
