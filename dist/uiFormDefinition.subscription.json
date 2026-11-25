@@ -183,7 +183,7 @@
               "defaultValue": "snet-data",
               "toolTip": "Name of the secondary subnet.",
               "constraints": {
-                "required": "[steps('networking').enableSubnet2]",
+                "required": false,
                 "validations": [
                   {
                     "regex": "^[a-zA-Z0-9-_.]{1,80}$",
@@ -200,7 +200,7 @@
               "defaultValue": "10.0.2.0/24",
               "toolTip": "IPv4 CIDR prefix for Subnet 2. Must be non-overlapping with other subnets.",
               "constraints": {
-                "required": "[steps('networking').enableSubnet2]",
+                "required": false,
                 "validations": [
                   {
                     "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([8-9]|1[0-9]|2[0-9]))$",
@@ -233,7 +233,7 @@
               "defaultValue": "snet-mgmt",
               "toolTip": "Name of the tertiary subnet.",
               "constraints": {
-                "required": "[steps('networking').enableSubnet3]",
+                "required": false,
                 "validations": [
                   {
                     "regex": "^[a-zA-Z0-9-_.]{1,80}$",
@@ -250,7 +250,7 @@
               "defaultValue": "10.0.3.0/24",
               "toolTip": "IPv4 CIDR prefix for Subnet 3. Must be non-overlapping with other subnets.",
               "constraints": {
-                "required": "[steps('networking').enableSubnet3]",
+                "required": false,
                 "validations": [
                   {
                     "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([8-9]|1[0-9]|2[0-9]))$",
@@ -259,60 +259,6 @@
                 ]
               },
               "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3)]"
-            },
-            {
-              "name": "duplicateSubnet12NameWarning",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "Warning",
-                "text": "Subnet Naming Conflict: Subnet 1 and Subnet 2 have identical names. Subnet names must be unique (case-insensitive)."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, equals(toLower(steps('networking').subnet1Name), toLower(steps('networking').subnet2Name)))]"
-            },
-            {
-              "name": "duplicateSubnet13NameWarning",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "Warning",
-                "text": "Subnet Naming Conflict: Subnet 1 and Subnet 3 have identical names. Subnet names must be unique (case-insensitive)."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3, equals(toLower(steps('networking').subnet1Name), toLower(steps('networking').subnet3Name)))]"
-            },
-            {
-              "name": "duplicateSubnet23NameWarning",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "Warning",
-                "text": "Subnet Naming Conflict: Subnet 2 and Subnet 3 have identical names. Subnet names must be unique (case-insensitive)."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, steps('networking').enableSubnet3, equals(toLower(steps('networking').subnet2Name), toLower(steps('networking').subnet3Name)))]"
-            },
-            {
-              "name": "duplicateSubnet12PrefixWarning",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "Warning",
-                "text": "Subnet CIDR Conflict: Subnet 1 and Subnet 2 have identical CIDR prefixes. Subnet address ranges cannot overlap."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, equals(steps('networking').subnet1Prefix, steps('networking').subnet2Prefix))]"
-            },
-            {
-              "name": "duplicateSubnet13PrefixWarning",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "Warning",
-                "text": "Subnet CIDR Conflict: Subnet 1 and Subnet 3 have identical CIDR prefixes. Subnet address ranges cannot overlap."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3, equals(steps('networking').subnet1Prefix, steps('networking').subnet3Prefix))]"
-            },
-            {
-              "name": "duplicateSubnet23PrefixWarning",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "Warning",
-                "text": "Subnet CIDR Conflict: Subnet 2 and Subnet 3 have identical CIDR prefixes. Subnet address ranges cannot overlap."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, steps('networking').enableSubnet3, equals(steps('networking').subnet2Prefix, steps('networking').subnet3Prefix))]"
             },
             {
               "name": "existingVnetNotice",
@@ -759,7 +705,7 @@
         "vnetMode": "[steps('networking').vnetModeOptions]",
         "vnetName": "[steps('networking').vnetName]",
         "addressPrefix": "[steps('networking').addressPrefix]",
-        "subnets": "[if(equals(steps('networking').vnetModeOptions, 'new'), if(steps('networking').enableSubnet2, if(steps('networking').enableSubnet3, [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet2Name, '\",\"addressPrefix\":\"', steps('networking').subnet2Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet3Name, '\",\"addressPrefix\":\"', steps('networking').subnet3Prefix, '\"}'))], [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet2Name, '\",\"addressPrefix\":\"', steps('networking').subnet2Prefix, '\"}'))]), if(steps('networking').enableSubnet3, [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet3Name, '\",\"addressPrefix\":\"', steps('networking').subnet3Prefix, '\"}'))], [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}'))])), [parse('{\"name\":\"snet-placeholder\",\"addressPrefix\":\"10.0.0.0/24\"}')])]",
+        "subnets": "[if(equals(steps('networking').vnetModeOptions, 'new'), parse(concat('[{\"name\":\"', coalesce(steps('networking').subnet1Name, 'snet-workload'), '\",\"addressPrefix\":\"', coalesce(steps('networking').subnet1Prefix, '10.0.1.0/24'), '\"}', if(coalesce(steps('networking').enableSubnet2, false), concat(',{\"name\":\"', coalesce(steps('networking').subnet2Name, 'snet-data'), '\",\"addressPrefix\":\"', coalesce(steps('networking').subnet2Prefix, '10.0.2.0/24'), '\"}'), ''), if(coalesce(steps('networking').enableSubnet3, false), concat(',{\"name\":\"', coalesce(steps('networking').subnet3Name, 'snet-mgmt'), '\",\"addressPrefix\":\"', coalesce(steps('networking').subnet3Prefix, '10.0.3.0/24'), '\"}'), ''), ']')), parse('[{\"name\":\"snet-placeholder\",\"addressPrefix\":\"10.0.0.0/24\"}]'))]",
         "existingVnetName": "[if(equals(steps('networking').vnetModeOptions, 'existing'), coalesce(steps('networking').existingVnetDropDown.name, ''), '')]",
         "existingVnetResourceGroup": "[if(equals(steps('networking').vnetModeOptions, 'existing'), steps('basics').resourceGroup.value.name, '')]",
         "existingSubnetName": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), not(steps('networking').addNewSubnetToggle)), coalesce(steps('networking').existingSubnetDropDown, ''), '')]",
