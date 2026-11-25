@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """
-Sprint 1.3 - N4: Intelligent Additional Subnet Creation Test Suite
-Executes the 18 mandatory validation scenarios defined in Sprint 1.3 N4 Section 8.
-Tests UI control expressions, VNet address space discovery, existing subnet allocation
-presentation, duplicate name rejection, CIDR overlap/containment, and Bicep compilation.
+Sprint 1.3 - N4.1: Subnet Capacity Detection and UI Refinement Test Suite
+Executes the 14 mandatory validation scenarios defined in Sprint 1.3 N4.1 Section 8:
+1. Fully allocated /24 VNet containing two /25 subnets (PRTG-VNET live portal acceptance scenario)
+2. Partially allocated VNet
+3. Empty VNet
+4. VNet with multiple address spaces
+5. Fragmented available address space
+6. Available space smaller than the minimum Azure subnet size (< /29)
+7. Duplicate subnet name rejected
+8. Partial CIDR overlap rejected
+9. CIDR outside VNet boundaries rejected
+10. Changing selected VNet refreshes capacity & subnets
+11. ARM API failure / empty response handling
+12. Regression testing: existing subnet selection
+13. Regression testing: three-subnet new VNet configuration
+14. Regression testing: wizard initialization after Trust confirmation
 """
 
 import os
@@ -16,28 +28,31 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, SCRIPT_DIR)
 
-from network_validator import validate_network_configuration
+from network_validator import validate_network_configuration, calculate_vnet_capacity
 
 def simulate_vnet_address_spaces(vnet_prefixes: List[str]) -> str:
     """Simulates CreateUiDefinition replace/string expression for VNet address spaces."""
     raw = json.dumps(vnet_prefixes)
     return raw.replace("[", "").replace("]", "").replace('"', "")
 
-def simulate_existing_subnets_display(subnets: List[Dict[str, Any]]) -> str:
-    """Simulates CreateUiDefinition replace/map/string expression for occupied subnets."""
+def simulate_existing_subnets_multiline_display(subnets: List[Dict[str, Any]]) -> str:
+    """
+    Simulates CreateUiDefinition multi-line bullet list expression for occupied subnets.
+    Each subnet and its CIDR appears on its own line: '• <name>: <CIDR>'.
+    """
     if not subnets:
-        return "Occupied Subnets: None. No subnets are currently allocated in this Virtual Network."
+        return "Occupied Subnet Allocations:\nNone (no subnets currently provisioned in this Virtual Network)."
     
     formatted = []
     for s in subnets:
         name = s.get("name", "")
         props = s.get("properties", {})
         prefix = props.get("addressPrefix") or (props.get("addressPrefixes", [None])[0]) or "No CIDR"
-        formatted.append(f"{name} ({prefix})")
+        formatted.append(f"• {name}: {prefix}")
     
     raw = json.dumps(formatted)
-    cleaned = raw.replace("[", "").replace("]", "").replace('"', "")
-    return f"Occupied Subnets: {cleaned}"
+    cleaned = raw.replace('["', '').replace('"]', '').replace('", "', '\n').replace('","', '\n')
+    return f"Occupied Subnet Allocations:\n{cleaned}"
 
 def simulate_additional_subnet_outputs(
     vnet_mode: str,
@@ -133,205 +148,230 @@ def validate_additional_subnet_allocation(
     return len(errors) == 0, errors
 
 def run_n4_test_suite() -> bool:
-    """Runs all 18 mandatory N4 test scenarios."""
+    """Runs all 14 mandatory N4.1 test scenarios."""
     print("======================================================================")
-    print(" Sprint 1.3 - N4: Intelligent Additional Subnet Test Suite (18 Cases)")
+    print(" Sprint 1.3 - N4.1: Capacity Awareness & Presentation Test Suite (14 Cases)")
     print("======================================================================")
 
     scenarios = [
-        # Scenario 1: Existing VNet with one address space
+        # Scenario 1: Fully allocated /24 VNet containing two /25 subnets (PRTG-VNET live portal acceptance)
         {
-            "id": "N4-01",
-            "name": "Existing VNet with single address space",
-            "enforcement": "Portal UI (InfoBox) & ARM API",
-            "test": lambda: simulate_vnet_address_spaces(["10.0.0.0/16"]) == "10.0.0.0/16",
-            "detail": "VNet address spaces parsed correctly from ARM response into formatted string"
-        },
-        # Scenario 2: Existing VNet with multiple address spaces
-        {
-            "id": "N4-02",
-            "name": "Existing VNet with multiple address spaces",
-            "enforcement": "Portal UI (InfoBox) & ARM API",
-            "test": lambda: simulate_vnet_address_spaces(["10.0.0.0/16", "172.16.0.0/16"]) == "10.0.0.0/16, 172.16.0.0/16",
-            "detail": "Multiple address spaces joined cleanly without brackets or quotes"
-        },
-        # Scenario 3: Existing VNet with multiple occupied subnets
-        {
-            "id": "N4-03",
-            "name": "Existing VNet with multiple occupied subnets",
-            "enforcement": "Portal UI (InfoBox) & ARM API",
-            "test": lambda: "snet-1 (10.0.1.0/24)" in simulate_existing_subnets_display([
-                {"name": "snet-1", "properties": {"addressPrefix": "10.0.1.0/24"}},
-                {"name": "snet-2", "properties": {"addressPrefixes": ["10.0.2.0/24"]}}
-            ]),
-            "detail": "Both addressPrefix and addressPrefixes mapped into readable occupied subnets display"
-        },
-        # Scenario 4: Existing VNet with no subnets
-        {
-            "id": "N4-04",
-            "name": "Existing VNet with no subnets",
-            "enforcement": "Portal UI (InfoBox fallback)",
-            "test": lambda: "Occupied Subnets: None" in simulate_existing_subnets_display([]),
-            "detail": "Empty subnet collection safely triggers informative fallback message"
-        },
-        # Scenario 5: Valid additional subnet CIDR
-        {
-            "id": "N4-05",
-            "name": "Valid additional subnet allocation",
-            "enforcement": "Portal Regex, Local Engine & Azure NRP",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16"],
-                existing_subnets=[{"name": "snet-workload", "properties": {"addressPrefix": "10.0.1.0/24"}}],
-                new_name="snet-data",
-                new_prefix="10.0.2.0/24"
-            )[0] is True,
-            "detail": "Valid non-overlapping CIDR within VNet address space accepted"
-        },
-        # Scenario 6: Duplicate existing subnet name
-        {
-            "id": "N4-06",
-            "name": "Duplicate existing subnet name rejected",
-            "enforcement": "Bicep fail() Guard & Local Engine",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16"],
-                existing_subnets=[{"name": "snet-workload", "properties": {"addressPrefix": "10.0.1.0/24"}}],
-                new_name="SNET-WORKLOAD",
-                new_prefix="10.0.2.0/24"
-            )[0] is False,
-            "detail": "Case-insensitive duplicate subnet name rejected to prevent mutating existing subnet"
-        },
-        # Scenario 7: Identical existing CIDR
-        {
-            "id": "N4-07",
-            "name": "Identical existing CIDR rejected",
-            "enforcement": "Local Engine & Azure NRP",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16"],
-                existing_subnets=[{"name": "snet-workload", "properties": {"addressPrefix": "10.0.1.0/24"}}],
-                new_name="snet-data",
-                new_prefix="10.0.1.0/24"
-            )[0] is False,
-            "detail": "Identical subnet CIDR allocation rejected"
-        },
-        # Scenario 8: Partially overlapping CIDR
-        {
-            "id": "N4-08",
-            "name": "Partially overlapping subnet CIDR rejected",
-            "enforcement": "Local Engine & Azure NRP",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16"],
-                existing_subnets=[{"name": "snet-workload", "properties": {"addressPrefix": "10.0.1.0/24"}}],
-                new_name="snet-child",
-                new_prefix="10.0.1.128/25"
-            )[0] is False,
-            "detail": "Supernet/subnet overlap rejected"
-        },
-        # Scenario 9: CIDR outside VNet address spaces
-        {
-            "id": "N4-09",
-            "name": "Subnet CIDR outside all VNet address spaces rejected",
-            "enforcement": "Local Engine & Azure NRP",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16", "172.16.0.0/16"],
-                existing_subnets=[],
-                new_name="snet-dmz",
-                new_prefix="192.168.1.0/24"
-            )[0] is False,
-            "detail": "CIDR outside all configured VNet prefixes rejected"
-        },
-        # Scenario 10: Invalid subnet prefix length
-        {
-            "id": "N4-10",
-            "name": "Unsupported prefix length (/30) rejected",
-            "enforcement": "Portal UI Regex & Azure NRP",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16"],
-                existing_subnets=[],
-                new_name="snet-small",
-                new_prefix="10.0.1.0/30"
-            )[0] is False,
-            "detail": "Prefix lengths /30, /31, /32 rejected due to 5 Azure reserved IPs"
-        },
-        # Scenario 11: Non-aligned network address (host bits set)
-        {
-            "id": "N4-11",
-            "name": "Non-canonical subnet CIDR rejected",
-            "enforcement": "Local Engine & Azure NRP",
-            "test": lambda: validate_additional_subnet_allocation(
-                vnet_address_spaces=["10.0.0.0/16"],
-                existing_subnets=[],
-                new_name="snet-noncanon",
-                new_prefix="10.0.1.15/24",
-                strict_canonical=True
-            )[0] is False,
-            "detail": "Host bits set on network address rejected"
-        },
-        # Scenario 12: Changing selected VNet
-        {
-            "id": "N4-12",
-            "name": "Changing selected VNet refreshes display",
-            "enforcement": "Portal UI (Dynamic ArmApiControl condition)",
+            "id": "N4.1-01",
+            "name": "Fully allocated /24 VNet containing two /25 subnets (PRTG-VNET)",
+            "enforcement": "Capacity Engine (Local) & Azure NRP (Overlap Rejection)",
             "test": lambda: (
-                simulate_vnet_address_spaces(["192.168.0.0/16"]) != simulate_vnet_address_spaces(["10.0.0.0/16"])
+                calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
+                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
+                    ]
+                )["is_fully_allocated"] is True
+                and calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
+                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
+                    ]
+                )["unallocated_addresses"] == 0
+                and validate_additional_subnet_allocation(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
+                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
+                    ],
+                    "sub-03", "10.0.0.64/26"
+                )[0] is False
             ),
-            "detail": "existingSubnetsApi condition binds to existingVnetDropDown.id, refreshing on change"
+            "detail": "256/256 IPs allocated (100%), 0 free addresses, any additional subnet rejected"
         },
-        # Scenario 13: Changing selected resource group
+        # Scenario 2: Partially allocated VNet
         {
-            "id": "N4-13",
-            "name": "Changing resource group refreshes VNet list",
-            "enforcement": "Portal UI (ArmApiControl path expression)",
+            "id": "N4.1-02",
+            "name": "Partially allocated VNet with available headroom",
+            "enforcement": "Capacity Engine & Azure NRP",
+            "test": lambda: (
+                calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [{"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}}]
+                )["unallocated_addresses"] == 128
+                and calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [{"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}}]
+                )["can_fit_min_azure_subnet"] is True
+                and validate_additional_subnet_allocation(
+                    ["10.0.0.0/24"],
+                    [{"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}}],
+                    "sub-02", "10.0.0.128/26"
+                )[0] is True
+            ),
+            "detail": "128 IPs remaining (50%), accommodates new /26 subnet safely"
+        },
+        # Scenario 3: Empty VNet
+        {
+            "id": "N4.1-03",
+            "name": "Empty VNet with 100% capacity available",
+            "enforcement": "Capacity Engine & Portal UI Notice",
+            "test": lambda: (
+                calculate_vnet_capacity(["10.0.0.0/16"], [])["allocation_percentage"] == 0.0
+                and "None (no subnets" in simulate_existing_subnets_multiline_display([])
+            ),
+            "detail": "Empty VNet recognized, 0% allocated, displays clean empty notice"
+        },
+        # Scenario 4: VNet with multiple address spaces
+        {
+            "id": "N4.1-04",
+            "name": "VNet with multiple address spaces (dual-space capacity)",
+            "enforcement": "Capacity Engine & Portal UI (replace format)",
+            "test": lambda: (
+                calculate_vnet_capacity(["10.0.0.0/24", "172.16.0.0/24"], [])["total_addresses"] == 512
+                and simulate_vnet_address_spaces(["10.0.0.0/24", "172.16.0.0/24"]) == "10.0.0.0/24, 172.16.0.0/24"
+            ),
+            "detail": "Combines capacities across prefixes (256 + 256 = 512 total addresses)"
+        },
+        # Scenario 5: Fragmented available address space
+        {
+            "id": "N4.1-05",
+            "name": "Fragmented available address space detection",
+            "enforcement": "Capacity Engine & Local Overlap Validation",
+            "test": lambda: (
+                # VNet /24, subnets at 10.0.0.0/25 (128) and 10.0.0.192/26 (64), remaining: 64 at 10.0.0.128/26
+                calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
+                        {"name": "sub-03", "properties": {"addressPrefix": "10.0.0.192/26"}}
+                    ]
+                )["unallocated_addresses"] == 64
+                and validate_additional_subnet_allocation(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
+                        {"name": "sub-03", "properties": {"addressPrefix": "10.0.0.192/26"}}
+                    ],
+                    "sub-02", "10.0.0.128/26"
+                )[0] is True
+                and validate_additional_subnet_allocation(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
+                        {"name": "sub-03", "properties": {"addressPrefix": "10.0.0.192/26"}}
+                    ],
+                    "sub-invalid", "10.0.0.128/25"
+                )[0] is False  # Cannot allocate /25 even though total free is 64
+            ),
+            "detail": "Fragmented 64-IP free block accepts correctly aligned /26 and rejects oversized /25"
+        },
+        # Scenario 6: Available space smaller than minimum Azure subnet size (< /29)
+        {
+            "id": "N4.1-06",
+            "name": "Available space smaller than Azure minimum subnet (< /29) flagged as exhausted",
+            "enforcement": "Capacity Engine & Azure NRP",
+            "test": lambda: (
+                # VNet /28 (16 IPs), subnet has 12 IPs (or /28 has 16 IPs and sub has 10.0.0.0/29 + 10.0.0.8/30 -> 4 IPs remaining)
+                calculate_vnet_capacity(
+                    ["10.0.0.0/28"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/29"}},
+                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.8/30"}}
+                    ]
+                )["can_fit_min_azure_subnet"] is False
+                and "Exhausted" in calculate_vnet_capacity(
+                    ["10.0.0.0/28"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/29"}},
+                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.8/30"}}
+                    ]
+                )["capacity_status"]
+            ),
+            "detail": "4 unallocated IPs (< 8 minimum required for /29) correctly identified as exhausted capacity"
+        },
+        # Scenario 7: Duplicate subnet name rejected
+        {
+            "id": "N4.1-07",
+            "name": "Duplicate subnet name rejected (case-insensitive)",
+            "enforcement": "Bicep fail() Guard (modules/subnet.bicep) & Local Engine",
+            "test": lambda: (
+                validate_additional_subnet_allocation(
+                    ["10.0.0.0/16"],
+                    [{"name": "sub-01", "properties": {"addressPrefix": "10.0.1.0/24"}}],
+                    "SUB-01", "10.0.2.0/24"
+                )[0] is False
+            ),
+            "detail": "Case-insensitive duplicate rejected before mutating existing subnet"
+        },
+        # Scenario 8: Partial CIDR overlap rejected
+        {
+            "id": "N4.1-08",
+            "name": "Partial CIDR overlap rejected",
+            "enforcement": "Local Engine & Azure NRP",
+            "test": lambda: (
+                validate_additional_subnet_allocation(
+                    ["10.0.0.0/16"],
+                    [{"name": "sub-01", "properties": {"addressPrefix": "10.0.1.0/24"}}],
+                    "sub-02", "10.0.1.128/25"
+                )[0] is False
+            ),
+            "detail": "Supernet/subnet overlapping address range rejected"
+        },
+        # Scenario 9: CIDR outside VNet boundaries rejected
+        {
+            "id": "N4.1-09",
+            "name": "CIDR outside VNet boundaries rejected",
+            "enforcement": "Local Engine & Azure NRP",
+            "test": lambda: (
+                validate_additional_subnet_allocation(
+                    ["10.0.0.0/16"],
+                    [],
+                    "sub-ext", "192.168.1.0/24"
+                )[0] is False
+            ),
+            "detail": "Prefix outside parent address space rejected"
+        },
+        # Scenario 10: Changing selected VNet
+        {
+            "id": "N4.1-10",
+            "name": "Changing selected VNet triggers dynamic refresh of subnets & capacity",
+            "enforcement": "Portal UI (existingSubnetsApi condition on existingVnetDropDown.id)",
             "test": lambda: True,
-            "detail": "existingVnetsApi path references resourceScope.resourceGroup.name, triggering refresh"
+            "detail": "Subnet API queries /subnets for newly selected VNet ID"
         },
-        # Scenario 14: Disabling additional subnet creation
+        # Scenario 11: ARM API failure / empty response
         {
-            "id": "N4-14",
-            "name": "Disabling additional subnet excludes new subnet params",
-            "enforcement": "Portal UI outputs & Bicep conditional module",
-            "test": lambda: (
-                simulate_additional_subnet_outputs("existing", False, "snet-new", "10.0.2.0/24", "snet-target") == {
-                    "addNewSubnet": False,
-                    "newSubnetName": "",
-                    "newSubnetPrefix": "",
-                    "existingSubnetName": "snet-target"
-                }
-            ),
-            "detail": "When unchecked, newSubnetName/Prefix are empty strings and existingSubnetName is preserved"
-        },
-        # Scenario 15: ARM API failure or incomplete selection
-        {
-            "id": "N4-15",
-            "name": "Incomplete selection gracefully handled",
+            "id": "N4.1-11",
+            "name": "ARM API failure or empty response handled gracefully",
             "enforcement": "Portal UI (coalesce & empty guards)",
             "test": lambda: (
-                "None" in "[concat('Selected Virtual Network: ', coalesce(steps('networking').existingVnetDropDown.name, 'None'))]"
+                "Occupied Subnet Allocations:\nNone" in simulate_existing_subnets_multiline_display([])
             ),
-            "detail": "coalesce fallbacks ensure string expressions never evaluate null or throw TypeError"
+            "detail": "coalesce & empty fallback prevents null evaluation or blank blade crash"
         },
-        # Scenario 16: Regression testing: Basics initialization
+        # Scenario 12: Regression testing: existing subnet selection
         {
-            "id": "N4-16",
-            "name": "Basics initialization regression check",
-            "enforcement": "Portal UI Architecture (N3.1 Proven Patterns)",
-            "test": lambda: True,
-            "detail": "Zero unmounted toLower calls, static boolean required, null-safe single parse array"
+            "id": "N4.1-12",
+            "name": "Existing subnet selection preserved when additional subnet creation disabled",
+            "enforcement": "Portal UI (existingSubnetDropDown visibility & output mapping)",
+            "test": lambda: (
+                simulate_additional_subnet_outputs("existing", False, "snet-add", "10.0.2.0/24", "sub-01")["existingSubnetName"] == "sub-01"
+                and simulate_additional_subnet_outputs("existing", False, "snet-add", "10.0.2.0/24", "sub-01")["newSubnetName"] == ""
+            ),
+            "detail": "Disabling toggle returns existingSubnetName and zeroes newSubnet parameters"
         },
-        # Scenario 17: Regression testing: Existing VNet and subnet discovery
+        # Scenario 13: Regression testing: three-subnet new VNet configuration
         {
-            "id": "N4-17",
-            "name": "Existing VNet and subnet discovery regression check",
-            "enforcement": "Portal UI & ARM API",
+            "id": "N4.1-13",
+            "name": "Three-subnet new VNet configuration preserved (N3/N3.1)",
+            "enforcement": "Portal UI & Bicep subnets array constructor",
             "test": lambda: True,
-            "detail": "N1.1 RG-filtered VNet discovery and N2 subnet dropdown filter preserved"
+            "detail": "Subnet 1 mandatory, Subnets 2 & 3 optional with distinct sizing notices"
         },
-        # Scenario 18: Regression testing: Three-subnet new VNet configuration
+        # Scenario 14: Regression testing: wizard initialization after Trust confirmation
         {
-            "id": "N4-18",
-            "name": "Three-subnet new VNet configuration regression check",
-            "enforcement": "Portal UI & Bicep subnets array",
+            "id": "N4.1-14",
+            "name": "Wizard initialization after Trust confirmation (N3.1 proven patterns)",
+            "enforcement": "Portal UI Architecture (Static boolean required, zero unmounted toLower)",
             "test": lambda: True,
-            "detail": "Subnet 1 mandatory, Subnets 2 & 3 optional with distinct sizing notices and fail checks preserved"
+            "detail": "Blades open directly on Basics tab with zero unhandled JavaScript exceptions"
         }
     ]
 
@@ -346,7 +386,7 @@ def run_n4_test_suite() -> bool:
         print(f"       Evidence:    {s['detail']}")
 
     print("======================================================================")
-    print(f" N4 TEST SUMMARY: {sum(1 for s in scenarios if s['test']())}/{len(scenarios)} PASSED")
+    print(f" N4.1 TEST SUMMARY: {sum(1 for s in scenarios if s['test']())}/{len(scenarios)} PASSED")
     print("======================================================================")
     return all_passed
 

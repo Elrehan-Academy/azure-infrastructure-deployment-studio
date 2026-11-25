@@ -134,6 +134,79 @@ def validate_network_configuration(
     is_valid = len(errors) == 0
     return is_valid, errors
 
+def calculate_vnet_capacity(
+    vnet_address_spaces: List[str],
+    subnets: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Calculates detailed address space capacity metrics for a VNet and its subnets:
+    - total_addresses: Total IP address capacity across all VNet address spaces
+    - allocated_addresses: Total IP addresses allocated across subnets
+    - unallocated_addresses: Remaining free IP addresses
+    - allocation_percentage: Percentage of address space allocated (0.0 to 100.0)
+    - is_fully_allocated: True if 0 unallocated addresses remain
+    - can_fit_min_azure_subnet: True if unallocated >= 8 (minimum /29 subnet)
+    - capacity_status: 'Fully Allocated', 'Partially Allocated', 'Empty', or 'Exhausted'
+    """
+    total_ips = 0
+    vnet_nets = []
+    for vp in vnet_address_spaces:
+        if not vp or not isinstance(vp, str):
+            continue
+        try:
+            v_net = ipaddress.IPv4Network(vp.strip(), strict=False)
+            total_ips += v_net.num_addresses
+            vnet_nets.append(v_net)
+        except ValueError:
+            pass
+
+    allocated_ips = 0
+    for s in subnets:
+        props = s.get("properties", {})
+        prefixes = []
+        if props.get("addressPrefix"):
+            prefixes.append(props["addressPrefix"])
+        if props.get("addressPrefixes"):
+            prefixes.extend(props["addressPrefixes"])
+        if not prefixes and s.get("addressPrefix"):
+            prefixes.append(s["addressPrefix"])
+
+        for p in prefixes:
+            if not p or not isinstance(p, str):
+                continue
+            try:
+                s_net = ipaddress.IPv4Network(p.strip(), strict=False)
+                allocated_ips += s_net.num_addresses
+            except ValueError:
+                pass
+
+    unallocated_ips = max(0, total_ips - allocated_ips)
+    alloc_pct = (allocated_ips / total_ips * 100.0) if total_ips > 0 else 0.0
+
+    is_fully = (unallocated_ips == 0) and (total_ips > 0)
+    can_fit_min = unallocated_ips >= 8  # /29 is smallest Azure subnet
+
+    if total_ips == 0:
+        status = "Unknown / Invalid VNet CIDR"
+    elif allocated_ips == 0:
+        status = "Empty (100% Available)"
+    elif is_fully:
+        status = "Fully Allocated (0 Addresses Available)"
+    elif not can_fit_min:
+        status = f"Exhausted ({unallocated_ips} IPs remaining, < Azure minimum /29)"
+    else:
+        status = f"Partially Allocated ({unallocated_ips} IPs unallocated, {100.0 - alloc_pct:.1f}% free)"
+
+    return {
+        "total_addresses": total_ips,
+        "allocated_addresses": allocated_ips,
+        "unallocated_addresses": unallocated_ips,
+        "allocation_percentage": round(alloc_pct, 1),
+        "is_fully_allocated": is_fully,
+        "can_fit_min_azure_subnet": can_fit_min,
+        "capacity_status": status
+    }
+
 def run_test_suite() -> bool:
     """Executes the mandatory 8 test cases from Sprint 1.1 Section 5."""
     print("======================================================================")
