@@ -167,7 +167,9 @@ def calculate_vnet_capacity(
         if props.get("addressPrefix"):
             prefixes.append(props["addressPrefix"])
         if props.get("addressPrefixes"):
-            prefixes.extend(props["addressPrefixes"])
+            for p in props["addressPrefixes"]:
+                if p not in prefixes:
+                    prefixes.append(p)
         if not prefixes and s.get("addressPrefix"):
             prefixes.append(s["addressPrefix"])
 

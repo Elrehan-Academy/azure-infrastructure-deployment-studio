@@ -59,6 +59,32 @@ def simulate_existing_subnets_display(subnets: List[Dict[str, Any]], api_present
 # Alias for backward compatibility in test suites
 simulate_existing_subnets_multiline_display = simulate_existing_subnets_display
 
+def simulate_cuid_allocated_capacity(subnets: List[Dict[str, Any]]) -> int:
+    """
+    Simulates the CreateUiDefinition static prefix weight aggregation:
+    add(... mul(length(filter(subnets, (s) => endsWith(coalesce(s.properties.addressPrefix, first(s.properties.addressPrefixes), 'none'), '/{p}'))), {weight}) ...)
+    """
+    weights = {
+        '8': 16777216, '9': 8388608, '10': 4194304, '11': 2097152, '12': 1048576,
+        '13': 524288, '14': 262144, '15': 131072, '16': 65536, '17': 32768,
+        '18': 16384, '19': 8192, '20': 4096, '21': 2048, '22': 1024,
+        '23': 512, '24': 256, '25': 128, '26': 64, '27': 32, '28': 16, '29': 8
+    }
+    total = 0
+    for p, w in weights.items():
+        matched = []
+        for s in subnets:
+            props = s.get("properties") or {}
+            prefix = props.get("addressPrefix")
+            if prefix is None and props.get("addressPrefixes"):
+                prefix = props["addressPrefixes"][0] if len(props["addressPrefixes"]) > 0 else None
+            if prefix is None:
+                prefix = "none"
+            if prefix.endswith("/" + p):
+                matched.append(s)
+        total += len(matched) * w
+    return total
+
 def simulate_additional_subnet_outputs(
     vnet_mode: str,
     add_new_subnet: bool,
@@ -167,6 +193,7 @@ def run_n4_test_suite() -> bool:
             "name": "Fully allocated /24 VNet containing two /25 subnets (PRTG-VNET)",
             "enforcement": "Capacity Engine (Local) & Azure NRP (Overlap Rejection)",
             "test": lambda: (
+                # Format A (addressPrefix):
                 calculate_vnet_capacity(
                     ["10.0.0.0/24"],
                     [
@@ -174,18 +201,40 @@ def run_n4_test_suite() -> bool:
                         {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
                     ]
                 )["is_fully_allocated"] is True
+                # Format B (live PRTG-VNET ARM API structure with addressPrefixes and null addressPrefix):
                 and calculate_vnet_capacity(
                     ["10.0.0.0/24"],
                     [
-                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
-                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
+                        {"name": "sub-01", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.0/25"]}},
+                        {"name": "sub-02", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.128/25"]}}
+                    ]
+                )["is_fully_allocated"] is True
+                and calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.0/25"]}},
+                        {"name": "sub-02", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.128/25"]}}
                     ]
                 )["unallocated_addresses"] == 0
+                # Format C (both addressPrefix and addressPrefixes without double counting):
+                and calculate_vnet_capacity(
+                    ["10.0.0.0/24"],
+                    [
+                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25", "addressPrefixes": ["10.0.0.0/25"]}},
+                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25", "addressPrefixes": ["10.0.0.128/25"]}}
+                    ]
+                )["allocated_addresses"] == 256
+                # CreateUiDefinition expression simulation on PRTG-VNET live ARM structure:
+                and simulate_cuid_allocated_capacity([
+                    {"name": "sub-01", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.0/25"]}},
+                    {"name": "sub-02", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.128/25"]}}
+                ]) == 256
+                # Rejection of additional subnet into fully allocated VNet:
                 and validate_additional_subnet_allocation(
                     ["10.0.0.0/24"],
                     [
-                        {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
-                        {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
+                        {"name": "sub-01", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.0/25"]}},
+                        {"name": "sub-02", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.128/25"]}}
                     ],
                     "sub-03", "10.0.0.64/26"
                 )[0] is False
@@ -352,11 +401,20 @@ def run_n4_test_suite() -> bool:
             "test": lambda: (
                 # Available VNet:
                 calculate_vnet_capacity(["10.0.0.0/24"], [{"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}}])["can_fit_min_azure_subnet"] is True
-                # Switched to PRTG-VNET:
+                # Switched to PRTG-VNET (Format A):
                 and calculate_vnet_capacity(["10.0.0.0/24"], [
                     {"name": "sub-01", "properties": {"addressPrefix": "10.0.0.0/25"}},
                     {"name": "sub-02", "properties": {"addressPrefix": "10.0.0.128/25"}}
                 ])["can_fit_min_azure_subnet"] is False
+                # Switched to PRTG-VNET (Format B - live ARM API format):
+                and calculate_vnet_capacity(["10.0.0.0/24"], [
+                    {"name": "sub-01", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.0/25"]}},
+                    {"name": "sub-02", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.128/25"]}}
+                ])["can_fit_min_azure_subnet"] is False
+                and simulate_cuid_allocated_capacity([
+                    {"name": "sub-01", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.0/25"]}},
+                    {"name": "sub-02", "properties": {"addressPrefix": None, "addressPrefixes": ["10.0.0.128/25"]}}
+                ]) == 256
             ),
             "detail": "VNet switch recomputes capacity; PRTG-VNET immediately hides checkbox and blocks subnet creation"
         },
