@@ -77,7 +77,7 @@
                     "value": "new"
                   },
                   {
-                    "label": "Use existing virtual network (same or cross-resource group)",
+                    "label": "Use existing virtual network",
                     "value": "existing"
                   }
                 ]
@@ -220,14 +220,35 @@
               "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
             },
             {
-              "name": "existingSubnetName",
-              "type": "Microsoft.Common.TextBox",
-              "label": "Target Existing Subnet Name",
-              "toolTip": "Name of an existing subnet to bind VM or security controls to.",
-              "constraints": {
-                "required": false
+              "name": "existingSubnetsApi",
+              "type": "Microsoft.Solutions.ArmApiControl",
+              "condition": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)))]",
+              "request": {
+                "method": "GET",
+                "path": "[concat(steps('networking').existingVnetDropDown.id, '/subnets?api-version=2024-05-01')]"
+              }
+            },
+            {
+              "name": "noSubnetsNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "The selected Virtual Network has no available subnets. Enable 'Deploy an additional subnet into this existing Virtual Network' below to create a subnet, or select a different Virtual Network."
               },
-              "visible": "[equals(steps('networking').vnetModeOptions, 'existing')]"
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)), empty(steps('networking').existingSubnetsApi.value))]"
+            },
+            {
+              "name": "existingSubnetDropDown",
+              "type": "Microsoft.Common.DropDown",
+              "label": "Target Existing Subnet",
+              "placeholder": "Select an existing subnet...",
+              "toolTip": "Select a subnet within the chosen Virtual Network to bind VM or security controls to.",
+              "filter": true,
+              "constraints": {
+                "allowedValues": "[map(steps('networking').existingSubnetsApi.value, (item) => parse(concat('{\"label\":\"', item.name, ' (', coalesce(item.properties.addressPrefix, first(item.properties.addressPrefixes), 'No CIDR'), ')\",\"value\":\"', item.name, '\"}')))]",
+                "required": "[not(steps('networking').addNewSubnetToggle)]"
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(steps('networking').addNewSubnetToggle))]"
             },
             {
               "name": "addNewSubnetToggle",
@@ -598,7 +619,7 @@
         "subnets": "[steps('networking').subnetsGrid]",
         "existingVnetName": "[if(equals(steps('networking').vnetModeOptions, 'existing'), coalesce(steps('networking').existingVnetDropDown.name, ''), '')]",
         "existingVnetResourceGroup": "[if(equals(steps('networking').vnetModeOptions, 'existing'), steps('basics').resourceGroup.value.name, '')]",
-        "existingSubnetName": "[steps('networking').existingSubnetName]",
+        "existingSubnetName": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), not(steps('networking').addNewSubnetToggle)), coalesce(steps('networking').existingSubnetDropDown, ''), '')]",
         "addNewSubnet": "[steps('networking').addNewSubnetToggle]",
         "newSubnetName": "[steps('networking').newSubnetName]",
         "newSubnetPrefix": "[steps('networking').newSubnetPrefix]",
