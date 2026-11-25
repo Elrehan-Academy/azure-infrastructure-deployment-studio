@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.49.2.45890",
-      "templateHash": "1109715844345006766"
+      "templateHash": "9728957064318199637"
     }
   },
   "definitions": {
@@ -425,7 +425,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.49.2.45890",
-              "templateHash": "2582584068160859841"
+              "templateHash": "15656856607469267584"
             }
           },
           "definitions": {
@@ -1146,7 +1146,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.49.2.45890",
-                      "templateHash": "17133933098235788580"
+                      "templateHash": "17273542133068121278"
                     }
                   },
                   "definitions": {
@@ -1233,10 +1233,17 @@
                         "name": "subnetNames",
                         "count": "[length(parameters('subnets'))]",
                         "input": "[toLower(parameters('subnets')[copyIndex('subnetNames')].name)]"
+                      },
+                      {
+                        "name": "subnetPrefixes",
+                        "count": "[length(parameters('subnets'))]",
+                        "input": "[parameters('subnets')[copyIndex('subnetPrefixes')].addressPrefix]"
                       }
                     ],
                     "hasDuplicateSubnetNames": "[not(equals(length(union(variables('subnetNames'), createArray())), length(variables('subnetNames'))))]",
-                    "subnetNameCheck": "[if(variables('hasDuplicateSubnetNames'), fail('Duplicate subnet names detected in subnets array. Subnet names must be unique.'), true())]"
+                    "subnetNameCheck": "[if(variables('hasDuplicateSubnetNames'), fail('Duplicate subnet names detected in subnets array. Subnet names must be unique.'), true())]",
+                    "hasDuplicateSubnetPrefixes": "[not(equals(length(union(variables('subnetPrefixes'), createArray())), length(variables('subnetPrefixes'))))]",
+                    "subnetPrefixCheck": "[if(variables('hasDuplicateSubnetPrefixes'), fail('Duplicate subnet addressPrefix detected in subnets array. Subnet address prefixes must be unique.'), true())]"
                   },
                   "resources": {
                     "vnet": {
@@ -1262,7 +1269,7 @@
                         ],
                         "addressSpace": {
                           "addressPrefixes": [
-                            "[if(variables('subnetNameCheck'), parameters('addressPrefix'), parameters('addressPrefix'))]"
+                            "[if(and(variables('subnetNameCheck'), variables('subnetPrefixCheck')), parameters('addressPrefix'), parameters('addressPrefix'))]"
                           ]
                         }
                       }

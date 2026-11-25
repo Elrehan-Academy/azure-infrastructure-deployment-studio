@@ -77,9 +77,10 @@ def validate_network_configuration(
             errors.append(f"Subnet at index {idx} has an empty or invalid name.")
             continue
 
-        if name in seen_names:
+        name_lower = name.lower()
+        if name_lower in seen_names:
             errors.append(f"Duplicate subnet name detected: '{name}'.")
-        seen_names.add(name)
+        seen_names.add(name_lower)
 
         # Prefix parsing
         if not prefix:

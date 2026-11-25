@@ -32,6 +32,7 @@ scripts_dir = os.path.join(project_root, "scripts")
 sys.path.insert(0, scripts_dir)
 try:
     from network_validator import validate_network_configuration, run_test_suite
+    from test_three_subnets import run_n3_test_suite
     has_net_validator = True
 except ImportError as e:
     has_net_validator = False
@@ -236,11 +237,12 @@ with open(os.path.join(project_root, "modules/network.bicep")) as nf:
     net_src = nf.read()
 
 has_dup_guard = "hasDuplicateSubnetNames" in net_src and "fail(" in net_src
+has_prefix_guard = "hasDuplicateSubnetPrefixes" in net_src and "fail(" in net_src
 record(
-    "Duplicate subnet name validation guard in modules/network.bicep",
-    "Modules/network.bicep evaluates uniqueness of subnet names and fails if duplicates exist",
-    f"hasDuplicateSubnetGuard={has_dup_guard}",
-    "PASS" if has_dup_guard else "FAIL"
+    "Duplicate subnet name & prefix validation guards in modules/network.bicep",
+    "Modules/network.bicep evaluates uniqueness of subnet names and prefixes and fails if duplicates exist",
+    f"hasDuplicateSubnetGuard={has_dup_guard}, hasDuplicatePrefixGuard={has_prefix_guard}",
+    "PASS" if (has_dup_guard and has_prefix_guard) else "FAIL"
 )
 
 if has_net_validator:
@@ -250,6 +252,14 @@ if has_net_validator:
         "All 8 test cases pass exact expected validation outcomes",
         "8/8 tests passed" if net_suite_passed else "Failures in test cases",
         "PASS" if net_suite_passed else "FAIL"
+    )
+
+    n3_passed, n3_failed, _ = run_n3_test_suite()
+    record(
+        "Smart Three-Subnet validation engine (15 mandatory test scenarios)",
+        "All 15 test scenarios pass exact expected validation outcomes",
+        f"{n3_passed}/15 tests passed" if n3_failed == 0 else f"{n3_failed} failures",
+        "PASS" if n3_failed == 0 else "FAIL"
     )
 else:
     record("Network calculation engine", "network_validator.py present", net_import_err, "FAIL")

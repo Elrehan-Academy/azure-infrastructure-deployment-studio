@@ -38,6 +38,11 @@ var subnetNames = [for s in subnets: toLower(s.name)]
 var hasDuplicateSubnetNames = length(union(subnetNames, [])) != length(subnetNames)
 var subnetNameCheck = hasDuplicateSubnetNames ? fail('Duplicate subnet names detected in subnets array. Subnet names must be unique.') : true
 
+// Duplicate subnet address prefix validation
+var subnetPrefixes = [for s in subnets: s.addressPrefix]
+var hasDuplicateSubnetPrefixes = length(union(subnetPrefixes, [])) != length(subnetPrefixes)
+var subnetPrefixCheck = hasDuplicateSubnetPrefixes ? fail('Duplicate subnet addressPrefix detected in subnets array. Subnet address prefixes must be unique.') : true
+
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: vnetName
   location: location
@@ -45,7 +50,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   properties: {
     addressSpace: {
       addressPrefixes: [
-        subnetNameCheck ? addressPrefix : addressPrefix
+        subnetNameCheck && subnetPrefixCheck ? addressPrefix : addressPrefix
       ]
     }
     subnets: [

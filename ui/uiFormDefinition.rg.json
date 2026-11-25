@@ -120,58 +120,201 @@
               "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
             },
             {
-              "name": "subnetsGrid",
-              "type": "Microsoft.Common.EditableGrid",
-              "label": "Subnets Configuration",
-              "ariaLabel": "Subnet configuration table",
+              "name": "subnet1Notice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Subnet 1 (Mandatory Workload Subnet). Azure reserves 5 IP addresses per subnet. Sizing guide: /24 = 251 available IPs, /25 = 123, /26 = 59, /27 = 27, /28 = 11, /29 = 3 (smallest supported). Prefixes must be between /8 and /29."
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
+            },
+            {
+              "name": "subnet1Name",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Subnet 1 Name",
+              "defaultValue": "snet-workload",
+              "toolTip": "Name of the primary mandatory subnet (1-80 alphanumeric characters, hyphens, or underscores).",
               "constraints": {
-                "width": "Full",
-                "rows": {
-                  "count": {
-                    "min": 1,
-                    "max": 10
-                  }
-                },
-                "columns": [
+                "required": true,
+                "validations": [
                   {
-                    "id": "name",
-                    "header": "Subnet Name",
-                    "width": "1fr",
-                    "element": {
-                      "type": "Microsoft.Common.TextBox",
-                      "placeholder": "e.g. snet-workload",
-                      "constraints": {
-                        "required": true,
-                        "validations": [
-                          {
-                            "regex": "^[a-zA-Z0-9-_.]{1,80}$",
-                            "message": "Subnet name must be between 1 and 80 characters."
-                          }
-                        ]
-                      }
-                    }
-                  },
-                  {
-                    "id": "addressPrefix",
-                    "header": "Subnet CIDR Prefix",
-                    "width": "1fr",
-                    "element": {
-                      "type": "Microsoft.Common.TextBox",
-                      "placeholder": "e.g. 10.0.1.0/24",
-                      "constraints": {
-                        "required": true,
-                        "validations": [
-                          {
-                            "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$",
-                            "message": "Must be a valid IPv4 CIDR prefix."
-                          }
-                        ]
-                      }
-                    }
+                    "regex": "^[a-zA-Z0-9-_.]{1,80}$",
+                    "message": "Subnet name must be between 1 and 80 characters."
                   }
                 ]
               },
               "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
+            },
+            {
+              "name": "subnet1Prefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Subnet 1 CIDR Prefix",
+              "defaultValue": "10.0.1.0/24",
+              "toolTip": "IPv4 CIDR prefix for Subnet 1 within the VNet address space. Supported Azure prefix lengths are /8 through /29.",
+              "constraints": {
+                "required": true,
+                "validations": [
+                  {
+                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([8-9]|1[0-9]|2[0-9]))$",
+                    "message": "Must be a valid IPv4 CIDR prefix between /8 and /29 (/30, /31, and /32 are unsupported by Azure)."
+                  }
+                ]
+              },
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
+            },
+            {
+              "name": "enableSubnet2",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Configure Subnet 2 (Optional)",
+              "toolTip": "Enable to configure an independent secondary subnet in this Virtual Network.",
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
+            },
+            {
+              "name": "subnet2Notice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Subnet 2 (Optional Secondary Subnet). Sizing: /24 = 251 available IPs, /25 = 123, /26 = 59, /27 = 27, /28 = 11, /29 = 3. Must not overlap with Subnet 1 or Subnet 3."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2)]"
+            },
+            {
+              "name": "subnet2Name",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Subnet 2 Name",
+              "defaultValue": "snet-data",
+              "toolTip": "Name of the secondary subnet.",
+              "constraints": {
+                "required": "[steps('networking').enableSubnet2]",
+                "validations": [
+                  {
+                    "regex": "^[a-zA-Z0-9-_.]{1,80}$",
+                    "message": "Subnet name must be between 1 and 80 characters."
+                  }
+                ]
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2)]"
+            },
+            {
+              "name": "subnet2Prefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Subnet 2 CIDR Prefix",
+              "defaultValue": "10.0.2.0/24",
+              "toolTip": "IPv4 CIDR prefix for Subnet 2. Must be non-overlapping with other subnets.",
+              "constraints": {
+                "required": "[steps('networking').enableSubnet2]",
+                "validations": [
+                  {
+                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([8-9]|1[0-9]|2[0-9]))$",
+                    "message": "Must be a valid IPv4 CIDR prefix between /8 and /29 (/30, /31, and /32 are unsupported by Azure)."
+                  }
+                ]
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2)]"
+            },
+            {
+              "name": "enableSubnet3",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Configure Subnet 3 (Optional)",
+              "toolTip": "Enable to configure an independent tertiary subnet in this Virtual Network.",
+              "visible": "[equals(steps('networking').vnetModeOptions, 'new')]"
+            },
+            {
+              "name": "subnet3Notice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Subnet 3 (Optional Tertiary Subnet). Sizing: /24 = 251 available IPs, /25 = 123, /26 = 59, /27 = 27, /28 = 11, /29 = 3. Must not overlap with Subnet 1 or Subnet 2."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3)]"
+            },
+            {
+              "name": "subnet3Name",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Subnet 3 Name",
+              "defaultValue": "snet-mgmt",
+              "toolTip": "Name of the tertiary subnet.",
+              "constraints": {
+                "required": "[steps('networking').enableSubnet3]",
+                "validations": [
+                  {
+                    "regex": "^[a-zA-Z0-9-_.]{1,80}$",
+                    "message": "Subnet name must be between 1 and 80 characters."
+                  }
+                ]
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3)]"
+            },
+            {
+              "name": "subnet3Prefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Subnet 3 CIDR Prefix",
+              "defaultValue": "10.0.3.0/24",
+              "toolTip": "IPv4 CIDR prefix for Subnet 3. Must be non-overlapping with other subnets.",
+              "constraints": {
+                "required": "[steps('networking').enableSubnet3]",
+                "validations": [
+                  {
+                    "regex": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([8-9]|1[0-9]|2[0-9]))$",
+                    "message": "Must be a valid IPv4 CIDR prefix between /8 and /29 (/30, /31, and /32 are unsupported by Azure)."
+                  }
+                ]
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3)]"
+            },
+            {
+              "name": "duplicateSubnet12NameWarning",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Subnet Naming Conflict: Subnet 1 and Subnet 2 have identical names. Subnet names must be unique (case-insensitive)."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, equals(toLower(steps('networking').subnet1Name), toLower(steps('networking').subnet2Name)))]"
+            },
+            {
+              "name": "duplicateSubnet13NameWarning",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Subnet Naming Conflict: Subnet 1 and Subnet 3 have identical names. Subnet names must be unique (case-insensitive)."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3, equals(toLower(steps('networking').subnet1Name), toLower(steps('networking').subnet3Name)))]"
+            },
+            {
+              "name": "duplicateSubnet23NameWarning",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Subnet Naming Conflict: Subnet 2 and Subnet 3 have identical names. Subnet names must be unique (case-insensitive)."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, steps('networking').enableSubnet3, equals(toLower(steps('networking').subnet2Name), toLower(steps('networking').subnet3Name)))]"
+            },
+            {
+              "name": "duplicateSubnet12PrefixWarning",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Subnet CIDR Conflict: Subnet 1 and Subnet 2 have identical CIDR prefixes. Subnet address ranges cannot overlap."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, equals(steps('networking').subnet1Prefix, steps('networking').subnet2Prefix))]"
+            },
+            {
+              "name": "duplicateSubnet13PrefixWarning",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Subnet CIDR Conflict: Subnet 1 and Subnet 3 have identical CIDR prefixes. Subnet address ranges cannot overlap."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet3, equals(steps('networking').subnet1Prefix, steps('networking').subnet3Prefix))]"
+            },
+            {
+              "name": "duplicateSubnet23PrefixWarning",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Warning",
+                "text": "Subnet CIDR Conflict: Subnet 2 and Subnet 3 have identical CIDR prefixes. Subnet address ranges cannot overlap."
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'new'), steps('networking').enableSubnet2, steps('networking').enableSubnet3, equals(steps('networking').subnet2Prefix, steps('networking').subnet3Prefix))]"
             },
             {
               "name": "existingVnetNotice",
@@ -607,7 +750,7 @@
         "vnetMode": "[steps('networking').vnetModeOptions]",
         "vnetName": "[steps('networking').vnetName]",
         "addressPrefix": "[steps('networking').addressPrefix]",
-        "subnets": "[steps('networking').subnetsGrid]",
+        "subnets": "[if(equals(steps('networking').vnetModeOptions, 'new'), if(steps('networking').enableSubnet2, if(steps('networking').enableSubnet3, [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet2Name, '\",\"addressPrefix\":\"', steps('networking').subnet2Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet3Name, '\",\"addressPrefix\":\"', steps('networking').subnet3Prefix, '\"}'))], [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet2Name, '\",\"addressPrefix\":\"', steps('networking').subnet2Prefix, '\"}'))]), if(steps('networking').enableSubnet3, [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}')), parse(concat('{\"name\":\"', steps('networking').subnet3Name, '\",\"addressPrefix\":\"', steps('networking').subnet3Prefix, '\"}'))], [parse(concat('{\"name\":\"', steps('networking').subnet1Name, '\",\"addressPrefix\":\"', steps('networking').subnet1Prefix, '\"}'))])), [parse('{\"name\":\"snet-placeholder\",\"addressPrefix\":\"10.0.0.0/24\"}')])]",
         "existingVnetName": "[if(equals(steps('networking').vnetModeOptions, 'existing'), coalesce(steps('networking').existingVnetDropDown.name, ''), '')]",
         "existingVnetResourceGroup": "[if(equals(steps('networking').vnetModeOptions, 'existing'), steps('basics').resourceScope.resourceGroup.name, '')]",
         "existingSubnetName": "[if(and(equals(steps('networking').vnetModeOptions, 'existing'), not(steps('networking').addNewSubnetToggle)), coalesce(steps('networking').existingSubnetDropDown, ''), '')]",
