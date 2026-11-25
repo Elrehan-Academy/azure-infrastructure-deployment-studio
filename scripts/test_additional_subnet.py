@@ -35,24 +35,29 @@ def simulate_vnet_address_spaces(vnet_prefixes: List[str]) -> str:
     raw = json.dumps(vnet_prefixes)
     return raw.replace("[", "").replace("]", "").replace('"', "")
 
-def simulate_existing_subnets_multiline_display(subnets: List[Dict[str, Any]]) -> str:
+def simulate_existing_subnets_display(subnets: List[Dict[str, Any]], api_present: bool = True) -> str:
     """
-    Simulates CreateUiDefinition multi-line bullet list expression for occupied subnets.
-    Each subnet and its CIDR appears on its own line: '• <name>: <CIDR>'.
+    Simulates CreateUiDefinition expression for occupied subnets.
+    Distinguishes empty subnet collection from API failure.
     """
+    if not api_present:
+        return "Occupied Subnets: Subnet discovery unavailable (API request pending or failed)."
     if not subnets:
-        return "Occupied Subnet Allocations:\nNone (no subnets currently provisioned in this Virtual Network)."
+        return "Occupied Subnets: None. No subnets are currently allocated in this Virtual Network."
     
     formatted = []
     for s in subnets:
         name = s.get("name", "")
         props = s.get("properties", {})
         prefix = props.get("addressPrefix") or (props.get("addressPrefixes", [None])[0]) or "No CIDR"
-        formatted.append(f"• {name}: {prefix}")
+        formatted.append(f"{name}: {prefix}")
     
     raw = json.dumps(formatted)
-    cleaned = raw.replace('["', '').replace('"]', '').replace('", "', '\n').replace('","', '\n')
-    return f"Occupied Subnet Allocations:\n{cleaned}"
+    cleaned = raw.replace("[", "").replace("]", "").replace('"', "")
+    return f"Occupied Subnets: {cleaned}"
+
+# Alias for backward compatibility in test suites
+simulate_existing_subnets_multiline_display = simulate_existing_subnets_display
 
 def simulate_additional_subnet_outputs(
     vnet_mode: str,
@@ -214,7 +219,7 @@ def run_n4_test_suite() -> bool:
             "enforcement": "Capacity Engine & Portal UI Notice",
             "test": lambda: (
                 calculate_vnet_capacity(["10.0.0.0/16"], [])["allocation_percentage"] == 0.0
-                and "None (no subnets" in simulate_existing_subnets_multiline_display([])
+                and "Occupied Subnets: None" in simulate_existing_subnets_display([])
             ),
             "detail": "Empty VNet recognized, 0% allocated, displays clean empty notice"
         },
@@ -342,7 +347,8 @@ def run_n4_test_suite() -> bool:
             "name": "ARM API failure or empty response handled gracefully",
             "enforcement": "Portal UI (coalesce & empty guards)",
             "test": lambda: (
-                "Occupied Subnet Allocations:\nNone" in simulate_existing_subnets_multiline_display([])
+                "Subnet discovery unavailable" in simulate_existing_subnets_display([], api_present=False)
+                and "Occupied Subnets: None" in simulate_existing_subnets_display([], api_present=True)
             ),
             "detail": "coalesce & empty fallback prevents null evaluation or blank blade crash"
         },

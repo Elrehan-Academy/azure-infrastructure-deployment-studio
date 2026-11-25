@@ -344,7 +344,7 @@
               "type": "Microsoft.Common.InfoBox",
               "options": {
                 "style": "Info",
-                "text": "[concat('Selected Virtual Network: ', coalesce(steps('networking').existingVnetDropDown.name, 'None'), ' (Region: ', coalesce(steps('networking').existingVnetDropDown.location, 'N/A'), ')\nConfigured Address Space: ', coalesce(steps('networking').existingVnetDropDown.addressSpaces, 'None'))]"
+                "text": "[concat('Selected Virtual Network: ', coalesce(steps('networking').existingVnetDropDown.name, 'None'), ' (Region: ', coalesce(steps('networking').existingVnetDropDown.location, 'N/A'), ') | Configured Address Space: ', coalesce(steps('networking').existingVnetDropDown.addressSpaces, 'None'))]"
               },
               "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)), steps('networking').addNewSubnetToggle)]"
             },
@@ -352,8 +352,8 @@
               "name": "existingSubnetAllocationsNotice",
               "type": "Microsoft.Common.InfoBox",
               "options": {
-                "style": "None",
-                "text": "[if(empty(steps('networking').existingSubnetsApi.value), 'Occupied Subnet Allocations:\nNone (no subnets currently provisioned in this Virtual Network).', concat('Occupied Subnet Allocations:\n', replace(replace(replace(replace(string(map(steps('networking').existingSubnetsApi.value, (item) => concat('• ', item.name, ': ', coalesce(item.properties.addressPrefix, first(item.properties.addressPrefixes), 'No CIDR')))), '[\"', ''), '\"]', ''), '\", \"', '\n'), '\",\"', '\n')))]"
+                "style": "Info",
+                "text": "[if(empty(steps('networking').existingSubnetsApi), 'Occupied Subnets: Subnet discovery unavailable (API request pending or failed).', if(empty(steps('networking').existingSubnetsApi.value), 'Occupied Subnets: None. No subnets are currently allocated in this Virtual Network.', concat('Occupied Subnets: ', replace(replace(replace(string(map(steps('networking').existingSubnetsApi.value, (item) => concat(item.name, ': ', coalesce(item.properties.addressPrefix, first(item.properties.addressPrefixes), 'No CIDR')))), '[', ''), ']', ''), '\"', ''))))]"
               },
               "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)), steps('networking').addNewSubnetToggle)]"
             },
@@ -362,18 +362,9 @@
               "type": "Microsoft.Common.InfoBox",
               "options": {
                 "style": "Warning",
-                "text": "Address Space Capacity & Verification:\nVerify that the configured address space above contains unallocated, contiguous IP addresses before deploying an additional subnet. If all address space is already allocated across existing subnets (for example, a /24 VNet with two /25 subnets), additional subnet creation will be rejected by Azure. To expand capacity, add an address range to the Virtual Network in the Azure Portal."
+                "text": "Address Space Verification: Ensure the new subnet fits within the configured VNet address space without overlapping existing subnets. If no address space remains, expand the VNet separately or select another VNet."
               },
               "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), not(empty(steps('networking').existingVnetDropDown.id)), steps('networking').addNewSubnetToggle)]"
-            },
-            {
-              "name": "newSubnetGuidanceNotice",
-              "type": "Microsoft.Common.InfoBox",
-              "options": {
-                "style": "None",
-                "text": "Subnet Sizing Guidance: Azure reserves 5 IP addresses per subnet. Sizing: /24 = 251 usable IPs, /25 = 123, /26 = 59, /27 = 27, /28 = 11, /29 = 3 (smallest supported). Prefixes must be between /8 and /29 and must not overlap with any occupied subnets."
-              },
-              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
             },
             {
               "name": "newSubnetName",
@@ -406,6 +397,15 @@
                     "message": "Must be a valid IPv4 CIDR prefix between /8 and /29 (/30, /31, and /32 are unsupported by Azure)."
                   }
                 ]
+              },
+              "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
+            },
+            {
+              "name": "newSubnetGuidanceNotice",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "style": "Info",
+                "text": "Subnet Sizing: Azure reserves five IP addresses per subnet. Supported IPv4 prefix sizes: /8 to /29. Available IP addresses: /24: 251 | /25: 123 | /26: 59 | /27: 27 | /28: 11 | /29: 3."
               },
               "visible": "[and(equals(steps('networking').vnetModeOptions, 'existing'), steps('networking').addNewSubnetToggle)]"
             }
